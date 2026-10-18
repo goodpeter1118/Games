@@ -12,6 +12,8 @@
   h1 { font-size:18px; margin:4px 0 8px; letter-spacing:2px; }
   #wrap { position:relative; width:min(96vw,480px); }
   canvas { width:100%; display:block; background:#000; border:2px solid var(--line); border-radius:8px; image-rendering:pixelated; }
+  #area { width:min(96vw,480px); font-size:14px; margin-bottom:6px; }
+  #area small { opacity:.7; margin-left:6px; }
   #hud { display:flex; gap:10px; font-size:13px; margin:8px 0; width:min(96vw,480px); justify-content:space-between;
          background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:6px 10px; }
   .bar { height:6px; background:#0008; border-radius:3px; overflow:hidden; margin-top:3px; }
@@ -41,6 +43,7 @@
 </head>
 <body>
 <h1>⚔️ 勇者物語</h1>
+<div id="area"></div>
 <div id="hud"></div>
 <div id="wrap">
   <canvas id="c" width="480" height="480"></canvas>
@@ -60,85 +63,178 @@
   <span></span><button data-d="0,-1">▲</button><span></span>
   <button data-d="-1,0">◀</button><button data-d="0,1">▼</button><button data-d="1,0">▶</button>
 </div>
-<div class="tip">方向鍵 / WASD 移動 · 🌿草地會遇敵 · 🏠村莊可回復 · 🏪商店買裝備 · 擊敗 💀 魔王通關</div>
+<div class="tip">方向鍵 / WASD 移動 · 🧓與NPC說話接任務 · 🏠旅店回復 · 🏪商店 · 📦寶箱 · 擊敗守護者開啟🌀傳送門 · 通關魔王城獲勝</div>
 
 <script>
-// ---------- 地圖 ----------
-// . 草地  # 牆/樹  ~ 水  H 村莊(回復)  C 魔王城  F 森林  : 路
-const MAP = [
-"####################",
-"#..................#",
-"#.FFF....~~~.......#",
-"#.FFF....~~~...FF..#",
-"#.FF.....~~~...FF..#",
-"#........~~~.......#",
-"#...HS...:::.......#",
-"#........:.~~~.....#",
-"#..FF....:.~~~..FF.#",
-"#..FF....:.~~~..FF.#",
-"#........:.........#",
-"#.....FF.:...FF....#",
-"#.....FF.:...FF....#",
-"#........:.........#",
-"#..~~~...:.....HS..#",
-"#..~~~...:.........#",
-"#........:::::.....#",
-"#..FF..........FF..#",
-"#..FF....C.....FF..#",
-"####################"
-].map(r => r.split(""));
-const T = 24, N = 20;
-const cv = document.getElementById("c"), ctx = cv.getContext("2d");
-ctx.imageSmoothingEnabled = false;
-const ICON = { ".":["#3e8e41","🌿"], "#":["#1f2a20","🌲"], "~":["#2f6fd6","〰️"], "H":["#3e8e41","🏠"],
-               "C":["#3a2a4a","🏰"], "S":["#3e8e41","🏪"], "F":["#2b6a33","🌳"], ":":["#a88c5c",""] };
-const BLOCK = new Set(["#","~","F"]);
-
-// ---------- 狀態 ----------
-const P = { x:4, y:7, hp:30, mhp:30, mp:10, mmp:10, atk:6, lv:1, xp:0, next:20, gold:0, potion:2,
-            def:0, pts:0, weapon:null, armor:null };
-const tAtk = () => P.atk + (P.weapon ? P.weapon.v : 0);
-const tDef = () => P.def + (P.armor ? P.armor.v : 0);
-const WEAPONS = [{n:"木劍",v:3,p:30},{n:"鐵劍",v:6,p:90},{n:"鋼劍",v:10,p:220},{n:"聖劍",v:16,p:500}];
-const ARMORS  = [{n:"皮甲",v:2,p:35},{n:"鎖甲",v:4,p:100},{n:"鎧甲",v:7,p:240},{n:"龍鱗甲",v:11,p:480}];
-const SKILLS = [
-  {id:"fire",   n:"🔥 火球", lv:1, mp:4, d:"傷害 ATK+4~9"},
-  {id:"heal",   n:"💚 治療", lv:1, mp:5, d:"回復 HP"},
-  {id:"slash",  n:"🗡️ 強斬", lv:3, mp:3, d:"1.8 倍 ATK"},
-  {id:"thunder",n:"⚡ 雷擊", lv:5, mp:8, d:"2.8 倍 ATK"},
-  {id:"drain",  n:"🩸 吸血", lv:7, mp:7, d:"傷害並回復一半"},
-];
-let inBattle = false, foe = null, over = false, busy = false;
-const ENEMIES = [
-  { n:"史萊姆", i:"🟢", hp:12, atk:3, xp:6,  g:4 },
-  { n:"哥布林", i:"👺", hp:20, atk:5, xp:10, g:8 },
-  { n:"蝙蝠",   i:"🦇", hp:16, atk:6, xp:12, g:7 },
-  { n:"骷髏兵", i:"💀", hp:32, atk:8, xp:20, g:14 },
-];
-const BOSS = { n:"魔王", i:"👹", hp:120, atk:14, xp:0, g:0, boss:true };
-
 const $ = id => document.getElementById(id);
 const rnd = (a,b) => a + Math.floor(Math.random()*(b-a+1));
 function say(t) { $("log").innerHTML = t; }
 
+// ---------- 章節資料 ----------
+// . 地面  # 邊界  F 障礙  ~ 水/岩漿/冰  H 旅店(回復)  S 商店  N NPC  $ 寶箱  B 守護者  > 前往下一章  < 回上一章
+const T = 24, N = 20;
+const cv = $("c"), ctx = cv.getContext("2d");
+const THEMES = {
+  grass:  { f:["#3e8e41","#439a47"], deco:"🌱", obs:["🌳","#2b6a33"], liq:["〰️","#2f6fd6"], h:"🏠", bg:"#0d1a10" },
+  forest: { f:["#1f4a2a","#245432"], deco:"🍄", obs:["🌲","#143520"], liq:["〰️","#285a73"], h:"⛺", bg:"#08130c" },
+  desert: { f:["#d9b66a","#e0c07b"], deco:"🦴", obs:["🌵","#c9a455"], liq:["💧","#2f8fd6"], h:"⛲", bg:"#2a2112" },
+  snow:   { f:["#e3edf7","#d6e4f2"], deco:"❄️", obs:["🗻","#9fb3c8"], liq:["🧊","#7fc3e8"], h:"🛖", bg:"#101a26" },
+  cave:   { f:["#4a4152","#51485a"], deco:"🪨", obs:["🪨","#2e2833"], liq:["🔥","#a8421f"], h:"🔥", bg:"#120e16" },
+  castle: { f:["#3a2f46","#41354e"], deco:"🕯️", obs:["🗿","#241c2e"], liq:["🔥","#7a1f1f"], h:"🛏️", bg:"#1a0b14" },
+};
+const E = (n,i,hp,atk,xp,g) => ({ n, i, hp, atk, xp, g });
+const AREAS = [
+  { name:"翠綠草原", th:"grass", rate:.13, from:[2,17],
+    e:[E("史萊姆","🟢",12,3,6,4), E("哥布林","👺",20,5,10,8), E("野狼","🐺",22,6,12,9)],
+    boss:{ n:"史萊姆王", i:"👑", hp:70, atk:8, xp:50, g:60, boss:true },
+    gate:{ b:[18,2], p:[18,1] }, H:[4,15], S:[6,15], $:[[15,16],[10,5]],
+    npc:{ at:[3,12], n:"村長", i:"🧓", hello:"年輕人,魔王的陰影正籠罩大地……先幫我清掉草原上的史萊姆吧。",
+      wait:"史萊姆還沒清完呢。", thanks:"太好了!這點心意請收下。", after:"往東北方走,打倒史萊姆王就能前往森林。",
+      quest:{ k:"史萊姆", n:3, txt:"擊敗 3 隻史萊姆", r:{ g:40, pts:1 } } } },
+  { name:"幽暗森林", th:"forest", rate:.14, from:[2,18],
+    e:[E("蝙蝠","🦇",22,7,14,10), E("毒蜘蛛","🕷️",30,8,18,13), E("樹精","🌲",38,9,22,16)],
+    boss:{ n:"巨型蜘蛛", i:"🕸️", hp:130, atk:12, xp:100, g:100, boss:true },
+    gate:{ b:[2,2], p:[1,2] }, H:[17,10], S:[10,10], $:[[8,3],[16,4]], back:[1,18],
+    npc:{ at:[15,16], n:"獵人", i:"🏹", hello:"最近毒蜘蛛猖獗,我的陷阱全被破壞了,能幫我處理嗎?",
+      wait:"毒蜘蛛還在到處爬呢。", thanks:"漂亮!這些藥水你拿去。", after:"森林西北角有隻巨型蜘蛛守著傳送門,小心牠的蓄力攻擊。",
+      quest:{ k:"毒蜘蛛", n:4, txt:"擊敗 4 隻毒蜘蛛", r:{ g:70, potion:2 } } } },
+  { name:"灼熱沙漠", th:"desert", rate:.14, from:[17,18],
+    e:[E("蠍子","🦂",44,11,26,18), E("木乃伊","🧟",56,12,30,22), E("沙盜","🥷",50,13,32,26)],
+    boss:{ n:"沙蟲", i:"🪱", hp:220, atk:16, xp:160, g:160, boss:true },
+    gate:{ b:[2,10], p:[1,10] }, H:[9,9], S:[11,9], $:[[4,4],[16,12]], back:[18,18],
+    npc:{ at:[14,3], n:"商旅", i:"🧳", hello:"我的駱駝隊被蠍子衝散了……拜託你幫忙清掉牠們!",
+      wait:"蠍子還很多,再加把勁!", thanks:"感激不盡!這是酬勞。", after:"沙蟲棲息在西邊,牠的傳送門通往雪山。",
+      quest:{ k:"蠍子", n:4, txt:"擊敗 4 隻蠍子", r:{ g:120, pts:2 } } } },
+  { name:"冰封雪山", th:"snow", rate:.14, from:[2,1],
+    e:[E("冰狼","🐺",64,15,38,28), E("雪怪","🦍",80,16,46,34), E("冰靈","🧊",58,18,42,32)],
+    boss:{ n:"冰龍", i:"🐲", hp:340, atk:20, xp:260, g:260, boss:true },
+    gate:{ b:[10,18], p:[10,19] }, H:[3,10], S:[5,10], $:[[17,2],[8,15]], back:[1,1],
+    npc:{ at:[16,6], n:"登山客", i:"🧗", hello:"雪怪堵住了登山路線,你看起來身手不錯,能幫我嗎?",
+      wait:"雪怪還在山腰徘徊。", thanks:"謝謝你!帶上這些吧。", after:"南邊的冰龍守著通往洞窟的傳送門,牠的吐息很痛。",
+      quest:{ k:"雪怪", n:3, txt:"擊敗 3 隻雪怪", r:{ g:200, pts:2, potion:3 } } } },
+  { name:"地下洞窟", th:"cave", rate:.15, from:[17,1],
+    e:[E("骷髏兵","💀",72,18,52,38), E("石魔像","🗿",110,19,62,46), E("幽靈","👻",84,22,64,50)],
+    boss:{ n:"洞窟巨人", i:"🧌", hp:480, atk:24, xp:400, g:400, boss:true },
+    gate:{ b:[1,18], p:[0,18] }, H:[12,5], S:[9,10], $:[[2,3],[16,16]], back:[18,1],
+    npc:{ at:[4,6], n:"礦工", i:"⛏️", hello:"石魔像把礦道全堵死了!只要能清掉牠們,我就不虧待你。",
+      wait:"石魔像還有一堆。", thanks:"通了通了!這是我的積蓄。", after:"再往西南就是巨人的老窩,通過後就是魔王城。",
+      quest:{ k:"石魔像", n:4, txt:"擊敗 4 隻石魔像", r:{ g:300, pts:3 } } } },
+  { name:"魔王城", th:"castle", rate:.16, from:[10,18], last:true,
+    e:[E("魔騎士","🤺",130,25,90,60), E("惡魔","😈",110,28,100,70), E("龍騎兵","🐉",150,27,110,80)],
+    boss:{ n:"魔王", i:"👹", hp:650, atk:28, xp:0, g:0, boss:true, rage:true },
+    gate:{ b:[10,2], p:null }, H:[3,10], S:[16,10], $:[[3,3],[17,3]], back:[10,19],
+    npc:{ at:[6,10], n:"流浪騎士", i:"🛡️", hello:"我曾與魔王交手……他在身負重傷時會狂暴。清掉他的魔騎士近衛吧。",
+      wait:"魔騎士還在城中巡邏。", thanks:"你是真正的勇者。願光明與你同在!", after:"魔王就在王座上,祝你好運。",
+      quest:{ k:"魔騎士", n:5, txt:"擊敗 5 隻魔騎士", r:{ g:400, pts:3, potion:3 } } } },
+];
+// 每章 '<' 傳送門位置與 from 相鄰
+const PORTAL_BACK = [null, [1,18], [18,18], [1,1], [18,1], [10,19]];
+
+const BLOCK = new Set(["#","~","F","N"]);
+const WEAPONS = [{n:"木劍",v:3,p:30,t:0},{n:"鐵劍",v:6,p:90,t:0},{n:"鋼劍",v:10,p:220,t:2},{n:"秘銀劍",v:13,p:350,t:3},{n:"聖劍",v:16,p:500,t:4}];
+const ARMORS  = [{n:"皮甲",v:2,p:35,t:0},{n:"鎖甲",v:4,p:100,t:1},{n:"鎧甲",v:7,p:240,t:2},{n:"秘銀甲",v:9,p:360,t:3},{n:"龍鱗甲",v:11,p:480,t:4}];
+const SKILLS = [
+  {id:"fire",   n:"🔥 火球", lv:1, mp:4,  d:"傷害 ATK+4~9"},
+  {id:"heal",   n:"💚 治療", lv:1, mp:5,  d:"回復 HP"},
+  {id:"slash",  n:"🗡️ 強斬", lv:3, mp:3,  d:"1.8 倍 ATK"},
+  {id:"thunder",n:"⚡ 雷擊", lv:5, mp:8,  d:"2.8 倍 ATK"},
+  {id:"drain",  n:"🩸 吸血", lv:7, mp:7,  d:"傷害並回復一半"},
+  {id:"meteor", n:"☄️ 流星", lv:9, mp:14, d:"4 倍 ATK"},
+];
+
+// ---------- 狀態 ----------
+const P = { x:2, y:17, hp:30, mhp:30, mp:10, mmp:10, atk:6, lv:1, xp:0, next:20, gold:0, potion:2, ether:1,
+            def:0, pts:0, weapon:null, armor:null };
+const G = { area:0, cleared:[], opened:{}, q:{} };
+const tAtk = () => P.atk + (P.weapon ? P.weapon.v : 0);
+const tDef = () => P.def + (P.armor ? P.armor.v : 0);
+const A = () => AREAS[G.area];
+let inBattle = false, foe = null, over = false, busy = false;
+
+// ---------- 地圖生成(固定種子,確保每次相同) ----------
+const grids = [];
+function build(ai) {
+  const a = AREAS[ai];
+  let s = ai*977 + 13;
+  const r = () => (s = (s*1664525 + 1013904223) >>> 0) / 4294967296;
+  const g = [...Array(N)].map(() => Array(N).fill("."));
+  for (let i=0;i<N;i++) g[0][i] = g[N-1][i] = g[i][0] = g[i][N-1] = "#";
+  const blob = (ch, w, h) => { const x = 1+Math.floor(r()*(N-1-w)), y = 1+Math.floor(r()*(N-1-h));
+    for (let dy=0;dy<h;dy++) for (let dx=0;dx<w;dx++) g[y+dy][x+dx] = ch; };
+  for (let k=0;k<15;k++) blob("F", 1+Math.floor(r()*3), 1+Math.floor(r()*3));
+  for (let k=0;k<3;k++) blob("~", 2+Math.floor(r()*2), 2+Math.floor(r()*3));
+  const carve = (p, q) => { let [x,y] = p; const set = () => { if (x>0&&y>0&&x<N-1&&y<N-1) g[y][x] = "."; };
+    while (x !== q[0]) { set(); x += Math.sign(q[0]-x); }
+    while (y !== q[1]) { set(); y += Math.sign(q[1]-y); }
+    set(); };
+  const pts = [a.from, a.H, a.S, a.npc.at, ...a.$, a.gate.b];
+  for (let i=1;i<pts.length;i++) carve(pts[i-1], pts[i]);
+  if (ai > 0) carve(a.from, PORTAL_BACK[ai]);
+  // 傳送門凹槽:除了守護者那一格外,四周封住
+  const { b, p } = a.gate;
+  if (p) {
+    [[1,0],[-1,0],[0,1],[0,-1]].forEach(([dx,dy]) => {
+      const x = p[0]+dx, y = p[1]+dy;
+      if ((x !== b[0] || y !== b[1]) && x>=0 && y>=0 && x<N && y<N) g[y][x] = "#";
+    });
+    g[p[1]][p[0]] = ">";
+  }
+  g[b[1]][b[0]] = "B";
+  g[a.H[1]][a.H[0]] = "H"; g[a.S[1]][a.S[0]] = "S"; g[a.npc.at[1]][a.npc.at[0]] = "N";
+  a.$.forEach(([x,y]) => g[y][x] = "$");
+  if (ai > 0) { const [x,y] = PORTAL_BACK[ai]; g[y][x] = "<"; }
+  return g;
+}
+function gridOf(i) { if (!grids[i]) grids[i] = build(i); return grids[i]; }
+const cur = () => gridOf(G.area);
+function applyState() {
+  G.cleared.forEach((c,i) => { if (c) { const [x,y] = AREAS[i].gate.b; gridOf(i)[y][x] = "."; } });
+  Object.keys(G.opened).forEach(k => { const [ai,x,y] = k.split(",").map(Number); gridOf(ai)[y][x] = "."; });
+}
+
+// ---------- 存檔 ----------
+const SAVE = "rpg_save_v2";
+function save() { try { localStorage.setItem(SAVE, JSON.stringify({ P, G })); } catch(e) {} }
+function load() {
+  try { const s = JSON.parse(localStorage.getItem(SAVE)); if (!s) return false;
+    Object.assign(P, s.P); Object.assign(G, s.G); applyState(); return true; } catch(e) { return false; }
+}
+function newGame() {
+  if (!confirm("確定要放棄目前進度,重新開始嗎?")) return;
+  try { localStorage.removeItem(SAVE); } catch(e) {}
+  location.reload();
+}
+
+// ---------- HUD / 繪製 ----------
 function hud() {
-  const bar = (v,m,c) => `<div class="bar"><i style="width:${v/m*100}%;background:${c}"></i></div>`;
+  const bar = (v,m,c) => `<div class="bar"><i style="width:${Math.max(0,v/m*100)}%;background:${c}"></i></div>`;
   $("hud").innerHTML =
     `<div>Lv ${P.lv}${bar(P.xp,P.next,"var(--xp)")}</div>` +
     `<div>❤️ ${P.hp}/${P.mhp}${bar(P.hp,P.mhp,"var(--hp)")}</div>` +
     `<div>🔷 ${P.mp}/${P.mmp}${bar(P.mp,P.mmp,"var(--mp)")}</div>` +
-    `<div>💰 ${P.gold} 🧪 ${P.potion}<br>⚔️${tAtk()} 🛡️${tDef()}${P.pts?` <b style="color:var(--xp)">+${P.pts}</b>`:""}</div>`;
+    `<div>💰 ${P.gold} 🧪${P.potion} 🔹${P.ether}<br>⚔️${tAtk()} 🛡️${tDef()}${P.pts?` <b style="color:var(--xp)">+${P.pts}</b>`:""}</div>`;
+  const a = A(), c = G.cleared[G.area];
+  $("area").innerHTML = `📍 第 ${G.area+1} 章 · ${a.name}　<small>${a.last ? (c ? "" : "目標:擊敗 "+a.boss.n) : (c ? "前往傳送門 🌀" : "目標:擊敗 "+a.boss.n)}</small>`;
 }
-
-// ---------- 繪製 ----------
 function draw() {
+  const a = A(), th = THEMES[a.th], g = cur();
   ctx.clearRect(0,0,480,480);
-  ctx.font = "20px serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
   for (let y=0;y<N;y++) for (let x=0;x<N;x++) {
-    const [bg,ic] = ICON[MAP[y][x]];
+    const t = g[y][x], cx = x*T+T/2, cy = y*T+T/2+1;
+    let bg = th.f[(x+y)%2], ic = "";
+    if (t==="#" || t==="F") { bg = th.obs[1]; ic = t==="#" ? "" : th.obs[0]; }
+    else if (t==="~") { bg = th.liq[1]; ic = th.liq[0]; }
+    else if (t===">" || t==="<") ic = "🌀";
+    else if (t==="H") ic = th.h;
+    else if (t==="S") ic = "🏪";
+    else if (t==="N") ic = a.npc.i;
+    else if (t==="$") ic = "📦";
+    else if (t==="B") ic = a.boss.i;
     ctx.fillStyle = bg; ctx.fillRect(x*T,y*T,T,T);
-    if (ic && MAP[y][x] !== ".") ctx.fillText(ic, x*T+T/2, y*T+T/2+1);
-    else if (MAP[y][x]==="." && (x*7+y*13)%9===0) { ctx.globalAlpha=.5; ctx.fillText("🌱",x*T+T/2,y*T+T/2); ctx.globalAlpha=1; }
+    ctx.font = "20px serif";
+    if (ic) ctx.fillText(ic, cx, cy);
+    else if (t==="." && (x*7+y*13)%9===0) { ctx.globalAlpha = .5; ctx.fillText(th.deco, cx, cy); ctx.globalAlpha = 1; }
   }
   ctx.font = "22px serif";
   ctx.fillText("🧙", P.x*T+T/2, P.y*T+T/2+1);
@@ -149,27 +245,80 @@ function move(dx,dy) {
   if (inBattle || over) return;
   const nx = P.x+dx, ny = P.y+dy;
   if (nx<0||ny<0||nx>=N||ny>=N) return;
-  const t = MAP[ny][nx];
-  if (BLOCK.has(t)) { say(t==="~" ? "水太深了,過不去。" : "被擋住了。"); return; }
+  const g = cur(), t = g[ny][nx], a = A();
+  if (t==="N") { talk(); return; }
+  if (BLOCK.has(t)) { say(t==="~" ? "過不去。" : "被擋住了。"); return; }
+  if (t===">" && !G.cleared[G.area]) { say("🌀 傳送門被封印了,先擊敗守護者!"); return; }
   P.x = nx; P.y = ny; draw();
   if (t==="H") {
-    P.hp = P.mhp; P.mp = P.mmp; hud();
-    say("🏠 村民熱情招待,HP / MP 全部回復!");
+    P.hp = P.mhp; P.mp = P.mmp; hud(); save();
+    say(`${THEMES[a.th].h} 好好休息了一下,HP / MP 全部回復!`);
   } else if (t==="S") {
     openShop();
-  } else if (t==="C") {
-    say("🏰 魔王城!魔王現身了!"); startBattle({...BOSS});
-  } else if (t==="." && Math.random() < 0.14) {
-    startBattle({...ENEMIES[Math.min(rnd(0, 1 + Math.floor(P.lv/2)), ENEMIES.length-1)]});
+  } else if (t==="$") {
+    openChest(nx, ny);
+  } else if (t===">") {
+    goArea(G.area+1, false);
+  } else if (t==="<") {
+    goArea(G.area-1, true);
+  } else if (t==="B") {
+    say(`${a.boss.i} ${a.boss.n} 擋住了去路!`); startBattle(mk(a.boss));
+  } else if (t==="." && Math.random() < a.rate) {
+    const e = a.e[rnd(0, a.e.length-1)];
+    startBattle(mk(e, Math.random() < .06));
   } else say("");
+}
+function goArea(i, back) {
+  G.area = i;
+  const a = AREAS[i];
+  [P.x, P.y] = back ? a.gate.b : a.from;
+  hud(); draw(); save();
+  say(`🌀 你來到了「${a.name}」。`);
+}
+function mk(e, elite) {
+  const f = { ...e, base:e.n, mhp:e.hp };
+  if (elite) { f.n = "精英" + e.n; f.hp = f.mhp = Math.round(e.hp*1.4); f.atk = Math.round(e.atk*1.3); f.xp *= 2; f.g *= 2; f.elite = true; }
+  return f;
+}
+
+// ---------- 寶箱 / NPC ----------
+function openChest(x, y) {
+  const key = [G.area,x,y].join(",");
+  if (G.opened[key]) return;
+  G.opened[key] = 1; cur()[y][x] = ".";
+  const r = Math.random(); let msg;
+  if (r < .5)      { const g = rnd(15,30)*(G.area+1); P.gold += g; msg = `💰 ${g} 金幣`; }
+  else if (r < .8) { const n = rnd(1,2); P.potion += n; msg = `🧪 藥水 x${n}`; }
+  else if (r < .92){ P.ether++; msg = "🔹 魔力水 x1"; }
+  else             { P.pts++; msg = "✨ 能力點 +1"; }
+  hud(); save(); say(`📦 打開寶箱,獲得 ${msg}!`);
+}
+function rewardText(r) {
+  const out = [];
+  if (r.g) { P.gold += r.g; out.push(`💰${r.g}`); }
+  if (r.pts) { P.pts += r.pts; out.push(`✨能力點+${r.pts}`); }
+  if (r.potion) { P.potion += r.potion; out.push(`🧪x${r.potion}`); }
+  return out.join(" ");
+}
+function talk() {
+  const n = A().npc, q = n.quest, s = G.q[G.area] || (G.q[G.area] = { st:0, c:0 });
+  let body;
+  if (s.st === 0) { s.st = 1; body = `${n.hello}<br><br>📜 <b>任務</b>:${q.txt}(${s.c}/${q.n})`; }
+  else if (s.st === 1) {
+    if (s.c >= q.n) { s.st = 2; body = `${n.thanks}<br><br>🎁 獎勵:${rewardText(q.r)}`; }
+    else body = `${n.wait}<br><br>📜 進度 ${s.c}/${q.n}`;
+  } else body = n.after;
+  openModal(`<h2>${n.i} ${n.n}</h2><div style="line-height:1.6">${body}</div><button style="margin-top:12px" onclick="closeModal()">好</button>`);
+  hud(); save();
 }
 
 // ---------- 戰鬥 ----------
 function startBattle(e) {
-  foe = {...e, mhp:e.hp}; inBattle = true; busy = false;
+  foe = e; foe.turn = 0; inBattle = true; busy = false;
   $("battle").style.display = "flex";
+  $("battle").style.background = THEMES[A().th].bg + "f2";
   $("foeIcon").textContent = foe.i; $("foeName").textContent = foe.n;
-  $("blog").innerHTML = `${foe.n} 出現了!`;
+  $("blog").innerHTML = `${foe.elite ? "⚠️ " : ""}${foe.n} 出現了!`;
   refreshBattle();
 }
 function renderCmds() {
@@ -178,6 +327,7 @@ function renderCmds() {
   add("⚔️ 攻擊", () => playerAct("atk"), "bAtk");
   SKILLS.filter(k => P.lv >= k.lv).forEach(k => add(`${k.n} (${k.mp})`, () => playerAct(k.id), "sk_"+k.id));
   add(`🧪 藥水 x${P.potion}`, () => playerAct("potion"), "bPot");
+  add(`🔹 魔力水 x${P.ether}`, () => playerAct("ether"), "bEth");
   add("🏃 逃跑", () => playerAct("run"), "bRun");
 }
 function refreshBattle() {
@@ -186,6 +336,7 @@ function refreshBattle() {
   document.querySelectorAll("#cmds button").forEach(b => b.disabled = busy);
   SKILLS.forEach(k => { const b = $("sk_"+k.id); if (b && P.mp < k.mp) b.disabled = true; });
   if (P.potion <= 0) $("bPot").disabled = true;
+  if (P.ether <= 0) $("bEth").disabled = true;
   hud();
 }
 function blog(t) { $("blog").innerHTML += "<br>" + t; }
@@ -200,94 +351,135 @@ function playerAct(kind) {
   else if (kind==="fire") hit(rnd(a+4, a+9), "🔥 火球術!");
   else if (kind==="slash") hit(Math.round(a*1.8) + rnd(0,3), "🗡️ 強力斬擊!");
   else if (kind==="thunder") hit(Math.round(a*2.8) + rnd(0,5), "⚡ 雷擊!");
+  else if (kind==="meteor") hit(Math.round(a*4) + rnd(0,8), "☄️ 流星墜落!");
   else if (kind==="drain") { const d = hit(Math.round(a*1.5) + rnd(0,3), "🩸 吸血!"); const h = Math.ceil(d/2); P.hp = Math.min(P.mhp, P.hp+h); blog(`回復 ${h} HP。`); }
   else if (kind==="heal") { const h = 15 + P.lv*2; P.hp = Math.min(P.mhp, P.hp+h); blog(`💚 恢復了 ${h} HP。`); }
   else if (kind==="potion") { P.potion--; P.hp = Math.min(P.mhp, P.hp+25); blog("🧪 喝下藥水,回復 25 HP。"); }
+  else if (kind==="ether") { P.ether--; P.mp = Math.min(P.mmp, P.mp+15); blog("🔹 喝下魔力水,回復 15 MP。"); }
   else if (kind==="run") {
-    if (foe.boss) blog("魔王不讓你逃跑!");
+    if (foe.boss) blog("守護者不讓你逃跑!");
     else if (Math.random() < 0.6) { endBattle("你成功逃跑了。"); return; }
     else blog("逃跑失敗!");
+  }
+  if (foe.rage && !foe.raged && foe.hp > 0 && foe.hp <= foe.mhp/2) {
+    foe.raged = true; foe.atk += 8; foe.hp = Math.min(foe.mhp, foe.hp + 80);
+    blog(`<b>😡 ${foe.n} 狂暴了!攻擊力上升並回復了體力!</b>`);
   }
   refreshBattle();
   if (foe.hp <= 0) return win();
   setTimeout(foeTurn, 600);
 }
 function foeTurn() {
-  const d = Math.max(1, rnd(foe.atk-2, foe.atk+2) - tDef());
-  P.hp -= d; blog(`${foe.n} 攻擊你,受到 ${d} 傷害!`);
+  foe.turn++;
+  const heavy = foe.boss && foe.turn % 3 === 0;
+  const d = Math.max(1, Math.round(rnd(foe.atk-2, foe.atk+2) * (heavy ? 1.6 : 1)) - tDef());
+  P.hp -= d; blog(`${foe.n} ${heavy ? "蓄力重擊" : "攻擊你"},受到 ${d} 傷害!`);
   if (P.hp <= 0) { P.hp = 0; refreshBattle(); return lose(); }
   busy = false; refreshBattle();
 }
-function win() {
-  if (foe.boss) { over = true; endBattle(""); say("🎉 魔王被擊敗了!世界恢復和平,你通關了!<br><button onclick='location.reload()'>再玩一次</button>"); return; }
-  P.xp += foe.xp; P.gold += foe.g;
-  let msg = `擊敗 ${foe.n}!獲得 ${foe.xp} 經驗、${foe.g} 金幣。`;
-  if (Math.random() < 0.2) { P.potion++; msg += " 撿到一瓶🧪藥水!"; }
+function levelUp() {
+  let msg = "";
   while (P.xp >= P.next) {
-    P.xp -= P.next; P.lv++; P.next = Math.round(P.next*1.5);
+    P.xp -= P.next; P.lv++; P.next = Math.round(P.next*1.3);
     P.mhp += 5; P.mmp += 2; P.atk += 1; P.pts += 3; P.hp = P.mhp; P.mp = P.mmp;
     msg += `<br>⭐ 升級!現在 Lv ${P.lv},獲得 3 點能力點(按 C 配點)。`;
     SKILLS.filter(k => k.lv === P.lv).forEach(k => msg += `<br>✨ 習得技能 ${k.n}!`);
   }
+  return msg;
+}
+function win() {
+  const a = A();
+  if (foe.boss && a.last) {
+    over = true; $("battle").style.display = "none"; inBattle = false; hud();
+    try { localStorage.removeItem(SAVE); } catch(e) {}
+    say(`🎉 <b>魔王被擊敗了!世界恢復和平!</b><br>通關等級 Lv ${P.lv} · 金幣 ${P.gold}<br><button onclick='location.reload()'>再玩一次</button>`);
+    return;
+  }
+  P.xp += foe.xp; P.gold += foe.g;
+  let msg = `擊敗 ${foe.n}!獲得 ${foe.xp} 經驗、${foe.g} 金幣。`;
+  if (foe.boss) {
+    G.cleared[G.area] = true; const [bx,by] = a.gate.b; cur()[by][bx] = ".";
+    P.pts += 2; msg += `<br>🎁 能力點 +2。🌀 傳送門解除封印了!`;
+  } else if (Math.random() < 0.2) { P.potion++; msg += " 撿到一瓶🧪藥水!"; }
+  const s = G.q[G.area], q = a.npc.quest;
+  if (s && s.st === 1 && foe.base === q.k && s.c < q.n) {
+    s.c++; msg += `<br>📜 任務進度 ${s.c}/${q.n}${s.c >= q.n ? ",回去找" + a.npc.n + "領獎吧!" : ""}`;
+  }
+  msg += levelUp();
   endBattle(msg);
 }
 function lose() {
-  over = true; $("battle").style.display = "none"; inBattle = false;
-  say("💀 你倒下了……<br><button onclick='location.reload()'>重新開始</button>");
+  $("battle").style.display = "none"; inBattle = false;
+  const lost = Math.floor(P.gold/2); P.gold -= lost;
+  P.hp = P.mhp; P.mp = P.mmp; [P.x, P.y] = A().from;
+  hud(); draw(); save();
+  say(`💀 你倒下了……被好心人送回了章節入口,損失 ${lost} 金幣,HP / MP 已回復。`);
 }
 function endBattle(msg) {
-  inBattle = false; $("battle").style.display = "none"; hud(); draw(); if (msg) say(msg);
+  inBattle = false; $("battle").style.display = "none"; hud(); draw(); save(); if (msg) say(msg);
 }
 
 // ---------- 面板:商店 / 角色 ----------
 function openModal(html) { const m = $("modal"); m.innerHTML = html; m.style.display = "flex"; inBattle = true; }
 function closeModal() { $("modal").style.display = "none"; inBattle = false; hud(); }
 function openShop() {
-  const rows = (list, key) => list.map((it,i) => {
-    const cur = P[key], owned = cur && cur.v >= it.v;
+  const rows = (list, key) => list.filter(it => it.t <= G.area).map(it => {
+    const i = list.indexOf(it), cur = P[key], owned = cur && cur.v >= it.v;
     return `<div class="row"><span>${it.n} ${key==="weapon"?"⚔️":"🛡️"}+${it.v}</span>
       <button onclick="buy('${key}',${i})" ${owned||P.gold<it.p?"disabled":""}>${owned?"已擁有/更強":"💰"+it.p}</button></div>`;
   }).join("");
   openModal(`<h2>🏪 商店 · 💰 ${P.gold}</h2>
     <div class="row"><span>🧪 藥水(回 25 HP)</span><button onclick="buy('potion')" ${P.gold<15?"disabled":""}>💰15</button></div>
+    <div class="row"><span>🔹 魔力水(回 15 MP)</span><button onclick="buy('ether')" ${P.gold<25?"disabled":""}>💰25</button></div>
     ${rows(WEAPONS,"weapon")}${rows(ARMORS,"armor")}
     <button style="margin-top:10px" onclick="closeModal()">離開</button>`);
 }
 function buy(kind, i) {
   if (kind==="potion") { if (P.gold<15) return; P.gold-=15; P.potion++; }
+  else if (kind==="ether") { if (P.gold<25) return; P.gold-=25; P.ether++; }
   else { const it = (kind==="weapon"?WEAPONS:ARMORS)[i]; if (P.gold<it.p) return; P.gold-=it.p; P[kind]=it; }
-  hud(); openShop();
+  hud(); save(); openShop();
 }
 function openStats() {
   if (inBattle || over) return;
-  const row = (label, key, cost) => `<div class="row"><span>${label}</span><button onclick="spend('${key}')" ${P.pts<1?"disabled":""}>+ 1點</button></div>`;
+  const row = (label, key) => `<div class="row"><span>${label}</span><button onclick="spend('${key}')" ${P.pts<1?"disabled":""}>+ 1點</button></div>`;
+  const n = A().npc, q = n.quest, s = G.q[G.area];
+  const qtxt = !s || s.st===0 ? `尚未接取(找 ${n.i}${n.n})` : s.st===2 ? "✅ 已完成" : `${q.txt}(${s.c}/${q.n})`;
   openModal(`<h2>📋 勇者 Lv ${P.lv} · 能力點 ${P.pts}</h2>
     <div class="row"><span>❤️ HP ${P.hp}/${P.mhp}</span><span>🔷 MP ${P.mp}/${P.mmp}</span></div>
     <div class="row"><span>⚔️ 攻擊 ${tAtk()} (${P.weapon?P.weapon.n:"徒手"})</span><span>🛡️ 防禦 ${tDef()} (${P.armor?P.armor.n:"布衣"})</span></div>
     ${row("提升 HP 上限 +6","mhp")}${row("提升 MP 上限 +3","mmp")}${row("提升 攻擊 +1","atk")}${row("提升 防禦 +1","def")}
+    <h2 style="margin-top:12px">本章任務</h2><div class="row"><span>📜 ${qtxt}</span></div>
     <h2 style="margin-top:12px">技能</h2>
     ${SKILLS.map(k => `<div class="row" style="opacity:${P.lv>=k.lv?1:.4}"><span>${k.n} <small>${k.d}</small></span><span>${P.lv>=k.lv?"MP "+k.mp:"Lv "+k.lv+" 解鎖"}</span></div>`).join("")}
-    <button style="margin-top:10px" onclick="closeModal()">關閉</button>`);
+    <div style="display:flex;gap:8px;margin-top:10px"><button style="flex:1" onclick="closeModal()">關閉</button><button onclick="newGame()">🔄 新遊戲</button></div>`);
 }
 function spend(key) {
   if (P.pts<1) return; P.pts--;
   if (key==="mhp") { P.mhp+=6; P.hp+=6; } else if (key==="mmp") { P.mmp+=3; P.mp+=3; } else P[key]++;
-  hud(); openStats();
+  hud(); save(); openStats();
 }
 $("menuBtn").onclick = openStats;
 
-// 戰鬥外使用藥水:按 P
+// 戰鬥外使用道具:P 藥水 / E 魔力水
 function usePotion() {
   if (inBattle || over) return;
   if (P.potion<=0) return say("沒有藥水了。");
   if (P.hp>=P.mhp) return say("HP 已經是滿的。");
-  P.potion--; P.hp = Math.min(P.mhp, P.hp+25); hud(); say("🧪 使用藥水,回復 25 HP。");
+  P.potion--; P.hp = Math.min(P.mhp, P.hp+25); hud(); save(); say("🧪 使用藥水,回復 25 HP。");
+}
+function useEther() {
+  if (inBattle || over) return;
+  if (P.ether<=0) return say("沒有魔力水了。");
+  if (P.mp>=P.mmp) return say("MP 已經是滿的。");
+  P.ether--; P.mp = Math.min(P.mmp, P.mp+15); hud(); save(); say("🔹 使用魔力水,回復 15 MP。");
 }
 
 // ---------- 輸入 ----------
 const KEYS = { ArrowUp:[0,-1], w:[0,-1], ArrowDown:[0,1], s:[0,1], ArrowLeft:[-1,0], a:[-1,0], ArrowRight:[1,0], d:[1,0] };
 addEventListener("keydown", e => {
   if (e.key==="p"||e.key==="P") return usePotion();
+  if (e.key==="e"||e.key==="E") return useEther();
   if (e.key==="c"||e.key==="C") return $("modal").style.display==="flex" ? closeModal() : openStats();
   const d = KEYS[e.key] || KEYS[e.key.toLowerCase?.()];
   if (d) { e.preventDefault(); move(...d); }
@@ -295,8 +487,12 @@ addEventListener("keydown", e => {
 document.querySelectorAll("#pad button").forEach(b =>
   b.addEventListener("click", () => move(...b.dataset.d.split(",").map(Number))));
 
+// ---------- 開始 ----------
+const resumed = load();
+if (!resumed) [P.x, P.y] = AREAS[0].from;
 hud(); draw();
-say("你是年輕的勇者。往南走,穿過道路,擊敗城堡裡的魔王吧!(按 P 使用藥水,C 開角色面板,🏪 商店買裝備)");
+say(resumed ? "📂 已讀取上次的進度,繼續冒險!"
+  : "你是年輕的勇者。先和 🧓 村長 說話接任務,擊敗每章的守護者,穿過 🌀 傳送門,一路挑戰魔王!<br><small>P 藥水 · E 魔力水 · C 角色面板 · 進度會自動存檔</small>");
 </script>
 </body>
 </html>
