@@ -56,6 +56,10 @@
       <button class="m on" data-s="115">普通</button>
       <button class="m" data-s="80">困難</button>
     </div>
+    <div class="btns" id="opts">
+      <button class="m" id="optObs">🧱 障礙物:關</button>
+      <button class="m" id="optWrap">🌀 穿牆:關</button>
+    </div>
     <button class="m go" id="start">開始遊戲</button>
     <p style="font-size:.78rem">方向鍵 / WASD 移動 · 空白鍵暫停 · M 靜音</p>
   </div>
@@ -69,7 +73,7 @@
 const cv=document.getElementById('c'),ctx=cv.getContext('2d');
 const N=24,S=cv.width/N;
 const $=id=>document.getElementById(id);
-let snake,prev,dir,next,food,star,score,level,combo,lastEat,over,paused,running,baseSpeed=115,speed,lastT,acc,particles,floats,shake,t0=0,eaten;
+let obstacles=[],useObs=false,useWrap=false,snake,prev,dir,next,food,star,score,level,combo,lastEat,over,paused,running,baseSpeed=115,speed,lastT,acc,particles,floats,shake,t0=0,eaten;
 let best=+(localStorage.getItem('neonSnakeBest')||0);
 $('best').textContent=best;
 
@@ -92,12 +96,22 @@ function reset(){
   snake=[{x:12,y:12},{x:11,y:12},{x:10,y:12},{x:9,y:12}];
   prev=snake.map(s=>({...s}));
   dir=next={x:1,y:0};
-  score=0;level=1;combo=1;lastEat=0;eaten=0;over=false;paused=false;star=null;
+  score=0;level=1;combo=1;lastEat=0;eaten=0;over=false;paused=false;star=null;obstacles=[];
+  if(useObs)for(let i=0;i<4;i++)addObstacle();
   particles=[];floats=[];shake=0;acc=0;speed=baseSpeed;
   updHud();placeFood();
 }
-function free(x,y){return !snake.some(s=>s.x===x&&s.y===y)&&!(food&&food.x===x&&food.y===y)&&!(star&&star.x===x&&star.y===y);}
+function free(x,y){return !obstacles.some(o=>o.x===x&&o.y===y)&&!snake.some(s=>s.x===x&&s.y===y)&&!(food&&food.x===x&&food.y===y)&&!(star&&star.x===x&&star.y===y);}
 function randCell(){let p;do{p={x:Math.floor(Math.random()*N),y:Math.floor(Math.random()*N)};}while(!free(p.x,p.y));return p;}
+function addObstacle(){
+  // 避開蛇頭前方的安全區,並避免擋住食物
+  for(let t=0;t<60;t++){
+    const p=randCell();
+    if(Math.abs(p.y-snake[0].y)<=1&&p.x>=snake[0].x-1)continue;
+    if(Math.abs(p.x-snake[0].x)+Math.abs(p.y-snake[0].y)<4)continue;
+    obstacles.push(p);return;
+  }
+}
 function placeFood(){food=null;food=randCell();}
 function updHud(){
   $('score').textContent=score;$('level').textContent=level;$('combo').textContent='x'+combo;
@@ -112,7 +126,8 @@ function step(){
   prev=snake.map(s=>({...s}));
   dir=next;
   const h={x:snake[0].x+dir.x,y:snake[0].y+dir.y};
-  if(h.x<0||h.y<0||h.x>=N||h.y>=N||snake.slice(0,-1).some(s=>s.x===h.x&&s.y===h.y)){return die();}
+  if(useWrap){h.x=(h.x+N)%N;h.y=(h.y+N)%N;}
+  if(h.x<0||h.y<0||h.x>=N||h.y>=N||obstacles.some(o=>o.x===h.x&&o.y===h.y)||snake.slice(0,-1).some(s=>s.x===h.x&&s.y===h.y)){return die();}
   snake.unshift(h);
   let grew=false;
   const now=performance.now();
@@ -123,7 +138,7 @@ function step(){
     beep(520+combo*40,.09,'square',.06,300);
     placeFood();
     if(!star&&Math.random()<.2)star={...randCell(),ttl:60};
-    if(eaten%6===0){level++;speed=Math.max(45,speed-8);shake=6;beep(300,.3,'sawtooth',.06,600);floats.push({x:300,y:300,t:'等級 '+level+'!',life:1.6,c:'#00e5ff'});}
+    if(eaten%6===0){level++;if(useObs){addObstacle();addObstacle();}speed=Math.max(45,speed-8);shake=6;beep(300,.3,'sawtooth',.06,600);floats.push({x:300,y:300,t:'等級 '+level+'!',life:1.6,c:'#00e5ff'});}
   }else if(star&&h.x===star.x&&h.y===star.y){
     score+=5;grew=true;combo=Math.min(combo+1,8);lastEat=now;
     burst(star.x,star.y,'#ffd700',30);floats.push({x:(h.x+.5)*S,y:h.y*S,t:'+5 ⭐',life:1.2,c:'#ffd700'});
@@ -163,6 +178,16 @@ function draw(alpha,time){
   ctx.strokeStyle='rgba(0,229,255,.06)';ctx.lineWidth=1;
   for(let i=1;i<N;i++){ctx.beginPath();ctx.moveTo(i*S,0);ctx.lineTo(i*S,cv.height);ctx.moveTo(0,i*S);ctx.lineTo(cv.width,i*S);ctx.stroke();}
 
+  // 障礙物
+  for(const o of obstacles){
+    ctx.shadowColor='#ff6a00';ctx.shadowBlur=12;
+    const g=ctx.createLinearGradient(o.x*S,o.y*S,(o.x+1)*S,(o.y+1)*S);
+    g.addColorStop(0,'#ff9a3c');g.addColorStop(1,'#b3220f');
+    ctx.fillStyle=g;rr(o.x*S+2,o.y*S+2,S-4,S-4,5);ctx.fill();
+    ctx.shadowBlur=0;ctx.strokeStyle='rgba(255,255,255,.35)';ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.moveTo(o.x*S+7,o.y*S+7);ctx.lineTo((o.x+1)*S-7,(o.y+1)*S-7);
+    ctx.moveTo((o.x+1)*S-7,o.y*S+7);ctx.lineTo(o.x*S+7,(o.y+1)*S-7);ctx.stroke();
+  }
   // 食物(脈動)
   if(food){
     const p=1+Math.sin(time/180)*.12;
@@ -187,7 +212,9 @@ function draw(alpha,time){
   const pos=snake.map((s,i)=>{
     const p=prev[Math.min(i,prev.length-1)]||s;
     const a=running||over?alpha:1;
-    return{x:(p.x+(s.x-p.x)*a+.5)*S,y:(p.y+(s.y-p.y)*a+.5)*S};
+    const jump=Math.abs(s.x-p.x)>1||Math.abs(s.y-p.y)>1;
+    const b=jump?1:a;
+    return{x:(p.x+(s.x-p.x)*b+.5)*S,y:(p.y+(s.y-p.y)*b+.5)*S};
   });
   ctx.lineCap='round';ctx.lineJoin='round';
   for(let i=n-1;i>=0;i--){
@@ -199,6 +226,7 @@ function draw(alpha,time){
     ctx.beginPath();ctx.arc(pos[i].x,pos[i].y,r,0,7);ctx.fill();
     if(i>0){
       const a=pos[i],b=pos[i-1];
+      if(Math.abs(a.x-b.x)>S*1.5||Math.abs(a.y-b.y)>S*1.5)continue;
       ctx.strokeStyle=ctx.fillStyle;ctx.lineWidth=r*2*.95;
       ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
     }
@@ -265,6 +293,13 @@ document.querySelectorAll('#diff button').forEach(b=>b.addEventListener('click',
   document.querySelectorAll('#diff button').forEach(x=>x.classList.remove('on'));b.classList.add('on');
 }));
 document.querySelectorAll('.pad button').forEach(b=>b.addEventListener('pointerdown',e=>{e.preventDefault();turn(b.dataset.d);}));
+function bindToggle(id,label,get,set){
+  const b=$(id);
+  const upd=()=>{b.textContent=label+':'+(get()?'開':'關');b.classList.toggle('on',get());};
+  b.addEventListener('click',()=>{set(!get());upd();});upd();
+}
+bindToggle('optObs','🧱 障礙物',()=>useObs,v=>useObs=v);
+bindToggle('optWrap','🌀 穿牆',()=>useWrap,v=>useWrap=v);
 // 手機滑動
 let tx,ty;
 cv.addEventListener('touchstart',e=>{tx=e.touches[0].clientX;ty=e.touches[0].clientY;},{passive:true});
