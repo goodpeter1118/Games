@@ -30,6 +30,12 @@
   #pad { display:none; grid-template-columns:repeat(3,56px); gap:6px; margin-top:10px; }
   @media (pointer:coarse) { #pad { display:grid; } }
   #pad button { height:56px; padding:0; font-size:20px; }
+  #modal { position:absolute; inset:0; background:#0b0d14f7; border-radius:8px; display:none; flex-direction:column;
+           padding:12px; overflow:auto; font-size:14px; }
+  #modal h2 { margin:0 0 8px; font-size:16px; }
+  .row { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid var(--line); }
+  .row button { padding:5px 10px; font-size:13px; }
+  #cmds button { padding:8px 4px; font-size:14px; }
   .tip { font-size:12px; opacity:.6; margin-top:8px; }
 </style>
 </head>
@@ -43,21 +49,18 @@
       <div class="bar" style="width:60%;margin:6px auto 0;height:8px"><i id="foeHp" style="background:var(--hp)"></i></div></div>
     <div>
       <div id="blog" style="min-height:70px;font-size:14px;line-height:1.5;margin-bottom:8px"></div>
-      <div id="cmds">
-        <button id="bAtk">⚔️ 攻擊</button>
-        <button id="bSkl">🔥 火球 (MP 4)</button>
-        <button id="bHeal">💚 治療 (MP 5)</button>
-        <button id="bRun">🏃 逃跑</button>
-      </div>
+      <div id="cmds"></div>
     </div>
   </div>
+  <div id="modal"></div>
 </div>
 <div id="log"></div>
+<button id="menuBtn" style="margin-top:8px">📋 角色 / 技能 / 配點 (C)</button>
 <div id="pad">
   <span></span><button data-d="0,-1">▲</button><span></span>
   <button data-d="-1,0">◀</button><button data-d="0,1">▼</button><button data-d="1,0">▶</button>
 </div>
-<div class="tip">方向鍵 / WASD 移動 · 🌿草地會遇敵 · 🏠村莊可回復 · 擊敗 💀 魔王通關</div>
+<div class="tip">方向鍵 / WASD 移動 · 🌿草地會遇敵 · 🏠村莊可回復 · 🏪商店買裝備 · 擊敗 💀 魔王通關</div>
 
 <script>
 // ---------- 地圖 ----------
@@ -69,7 +72,7 @@ const MAP = [
 "#.FFF....~~~...FF..#",
 "#.FF.....~~~...FF..#",
 "#........~~~.......#",
-"#...H....:::.......#",
+"#...HS...:::.......#",
 "#........:.~~~.....#",
 "#..FF....:.~~~..FF.#",
 "#..FF....:.~~~..FF.#",
@@ -77,7 +80,7 @@ const MAP = [
 "#.....FF.:...FF....#",
 "#.....FF.:...FF....#",
 "#........:.........#",
-"#..~~~...:.....H...#",
+"#..~~~...:.....HS..#",
 "#..~~~...:.........#",
 "#........:::::.....#",
 "#..FF..........FF..#",
@@ -88,11 +91,23 @@ const T = 24, N = 20;
 const cv = document.getElementById("c"), ctx = cv.getContext("2d");
 ctx.imageSmoothingEnabled = false;
 const ICON = { ".":["#3e8e41","🌿"], "#":["#1f2a20","🌲"], "~":["#2f6fd6","〰️"], "H":["#3e8e41","🏠"],
-               "C":["#3a2a4a","🏰"], "F":["#2b6a33","🌳"], ":":["#a88c5c",""] };
+               "C":["#3a2a4a","🏰"], "S":["#3e8e41","🏪"], "F":["#2b6a33","🌳"], ":":["#a88c5c",""] };
 const BLOCK = new Set(["#","~","F"]);
 
 // ---------- 狀態 ----------
-const P = { x:4, y:7, hp:30, mhp:30, mp:10, mmp:10, atk:6, lv:1, xp:0, next:20, gold:0, potion:2 };
+const P = { x:4, y:7, hp:30, mhp:30, mp:10, mmp:10, atk:6, lv:1, xp:0, next:20, gold:0, potion:2,
+            def:0, pts:0, weapon:null, armor:null };
+const tAtk = () => P.atk + (P.weapon ? P.weapon.v : 0);
+const tDef = () => P.def + (P.armor ? P.armor.v : 0);
+const WEAPONS = [{n:"木劍",v:3,p:30},{n:"鐵劍",v:6,p:90},{n:"鋼劍",v:10,p:220},{n:"聖劍",v:16,p:500}];
+const ARMORS  = [{n:"皮甲",v:2,p:35},{n:"鎖甲",v:4,p:100},{n:"鎧甲",v:7,p:240},{n:"龍鱗甲",v:11,p:480}];
+const SKILLS = [
+  {id:"fire",   n:"🔥 火球", lv:1, mp:4, d:"傷害 ATK+4~9"},
+  {id:"heal",   n:"💚 治療", lv:1, mp:5, d:"回復 HP"},
+  {id:"slash",  n:"🗡️ 強斬", lv:3, mp:3, d:"1.8 倍 ATK"},
+  {id:"thunder",n:"⚡ 雷擊", lv:5, mp:8, d:"2.8 倍 ATK"},
+  {id:"drain",  n:"🩸 吸血", lv:7, mp:7, d:"傷害並回復一半"},
+];
 let inBattle = false, foe = null, over = false, busy = false;
 const ENEMIES = [
   { n:"史萊姆", i:"🟢", hp:12, atk:3, xp:6,  g:4 },
@@ -112,7 +127,7 @@ function hud() {
     `<div>Lv ${P.lv}${bar(P.xp,P.next,"var(--xp)")}</div>` +
     `<div>❤️ ${P.hp}/${P.mhp}${bar(P.hp,P.mhp,"var(--hp)")}</div>` +
     `<div>🔷 ${P.mp}/${P.mmp}${bar(P.mp,P.mmp,"var(--mp)")}</div>` +
-    `<div>💰 ${P.gold}<br>🧪 ${P.potion}</div>`;
+    `<div>💰 ${P.gold} 🧪 ${P.potion}<br>⚔️${tAtk()} 🛡️${tDef()}${P.pts?` <b style="color:var(--xp)">+${P.pts}</b>`:""}</div>`;
 }
 
 // ---------- 繪製 ----------
@@ -140,6 +155,8 @@ function move(dx,dy) {
   if (t==="H") {
     P.hp = P.mhp; P.mp = P.mmp; hud();
     say("🏠 村民熱情招待,HP / MP 全部回復!");
+  } else if (t==="S") {
+    openShop();
   } else if (t==="C") {
     say("🏰 魔王城!魔王現身了!"); startBattle({...BOSS});
   } else if (t==="." && Math.random() < 0.14) {
@@ -155,11 +172,20 @@ function startBattle(e) {
   $("blog").innerHTML = `${foe.n} 出現了!`;
   refreshBattle();
 }
+function renderCmds() {
+  const c = $("cmds"); c.innerHTML = "";
+  const add = (label, fn, id) => { const b = document.createElement("button"); b.textContent = label; b.onclick = fn; b.id = id||""; c.appendChild(b); };
+  add("⚔️ 攻擊", () => playerAct("atk"), "bAtk");
+  SKILLS.filter(k => P.lv >= k.lv).forEach(k => add(`${k.n} (${k.mp})`, () => playerAct(k.id), "sk_"+k.id));
+  add(`🧪 藥水 x${P.potion}`, () => playerAct("potion"), "bPot");
+  add("🏃 逃跑", () => playerAct("run"), "bRun");
+}
 function refreshBattle() {
   $("foeHp").style.width = Math.max(0, foe.hp/foe.mhp*100) + "%";
-  $("bSkl").disabled = busy || P.mp < 4;
-  $("bHeal").disabled = busy || P.mp < 5;
-  $("bAtk").disabled = $("bRun").disabled = busy;
+  renderCmds();
+  document.querySelectorAll("#cmds button").forEach(b => b.disabled = busy);
+  SKILLS.forEach(k => { const b = $("sk_"+k.id); if (b && P.mp < k.mp) b.disabled = true; });
+  if (P.potion <= 0) $("bPot").disabled = true;
   hud();
 }
 function blog(t) { $("blog").innerHTML += "<br>" + t; }
@@ -167,13 +193,17 @@ function blog(t) { $("blog").innerHTML += "<br>" + t; }
 function playerAct(kind) {
   if (busy) return;
   busy = true; $("blog").innerHTML = "";
-  if (kind==="atk") {
-    const d = rnd(P.atk-1, P.atk+3); foe.hp -= d; blog(`你攻擊 ${foe.n},造成 ${d} 傷害!`);
-  } else if (kind==="skl") {
-    P.mp -= 4; const d = rnd(P.atk+4, P.atk+9); foe.hp -= d; blog(`🔥 火球術!造成 ${d} 傷害!`);
-  } else if (kind==="heal") {
-    P.mp -= 5; const h = 15 + P.lv*2; P.hp = Math.min(P.mhp, P.hp+h); blog(`💚 恢復了 ${h} HP。`);
-  } else if (kind==="run") {
+  const a = tAtk(), sk = SKILLS.find(k => k.id === kind);
+  if (sk) P.mp -= sk.mp;
+  const hit = (d, label) => { foe.hp -= d; blog(`${label}造成 ${d} 傷害!`); return d; };
+  if (kind==="atk") hit(rnd(a-1, a+3), `你攻擊 ${foe.n},`);
+  else if (kind==="fire") hit(rnd(a+4, a+9), "🔥 火球術!");
+  else if (kind==="slash") hit(Math.round(a*1.8) + rnd(0,3), "🗡️ 強力斬擊!");
+  else if (kind==="thunder") hit(Math.round(a*2.8) + rnd(0,5), "⚡ 雷擊!");
+  else if (kind==="drain") { const d = hit(Math.round(a*1.5) + rnd(0,3), "🩸 吸血!"); const h = Math.ceil(d/2); P.hp = Math.min(P.mhp, P.hp+h); blog(`回復 ${h} HP。`); }
+  else if (kind==="heal") { const h = 15 + P.lv*2; P.hp = Math.min(P.mhp, P.hp+h); blog(`💚 恢復了 ${h} HP。`); }
+  else if (kind==="potion") { P.potion--; P.hp = Math.min(P.mhp, P.hp+25); blog("🧪 喝下藥水,回復 25 HP。"); }
+  else if (kind==="run") {
     if (foe.boss) blog("魔王不讓你逃跑!");
     else if (Math.random() < 0.6) { endBattle("你成功逃跑了。"); return; }
     else blog("逃跑失敗!");
@@ -183,7 +213,7 @@ function playerAct(kind) {
   setTimeout(foeTurn, 600);
 }
 function foeTurn() {
-  const d = Math.max(1, rnd(foe.atk-2, foe.atk+2));
+  const d = Math.max(1, rnd(foe.atk-2, foe.atk+2) - tDef());
   P.hp -= d; blog(`${foe.n} 攻擊你,受到 ${d} 傷害!`);
   if (P.hp <= 0) { P.hp = 0; refreshBattle(); return lose(); }
   busy = false; refreshBattle();
@@ -195,8 +225,9 @@ function win() {
   if (Math.random() < 0.2) { P.potion++; msg += " 撿到一瓶🧪藥水!"; }
   while (P.xp >= P.next) {
     P.xp -= P.next; P.lv++; P.next = Math.round(P.next*1.5);
-    P.mhp += 8; P.mmp += 3; P.atk += 2; P.hp = P.mhp; P.mp = P.mmp;
-    msg += `<br>⭐ 升級!現在 Lv ${P.lv}。`;
+    P.mhp += 5; P.mmp += 2; P.atk += 1; P.pts += 3; P.hp = P.mhp; P.mp = P.mmp;
+    msg += `<br>⭐ 升級!現在 Lv ${P.lv},獲得 3 點能力點(按 C 配點)。`;
+    SKILLS.filter(k => k.lv === P.lv).forEach(k => msg += `<br>✨ 習得技能 ${k.n}!`);
   }
   endBattle(msg);
 }
@@ -208,23 +239,56 @@ function endBattle(msg) {
   inBattle = false; $("battle").style.display = "none"; hud(); draw(); if (msg) say(msg);
 }
 
-$("bAtk").onclick = () => playerAct("atk");
-$("bSkl").onclick = () => playerAct("skl");
-$("bHeal").onclick = () => playerAct("heal");
-$("bRun").onclick = () => playerAct("run");
+// ---------- 面板:商店 / 角色 ----------
+function openModal(html) { const m = $("modal"); m.innerHTML = html; m.style.display = "flex"; inBattle = true; }
+function closeModal() { $("modal").style.display = "none"; inBattle = false; hud(); }
+function openShop() {
+  const rows = (list, key) => list.map((it,i) => {
+    const cur = P[key], owned = cur && cur.v >= it.v;
+    return `<div class="row"><span>${it.n} ${key==="weapon"?"⚔️":"🛡️"}+${it.v}</span>
+      <button onclick="buy('${key}',${i})" ${owned||P.gold<it.p?"disabled":""}>${owned?"已擁有/更強":"💰"+it.p}</button></div>`;
+  }).join("");
+  openModal(`<h2>🏪 商店 · 💰 ${P.gold}</h2>
+    <div class="row"><span>🧪 藥水(回 25 HP)</span><button onclick="buy('potion')" ${P.gold<15?"disabled":""}>💰15</button></div>
+    ${rows(WEAPONS,"weapon")}${rows(ARMORS,"armor")}
+    <button style="margin-top:10px" onclick="closeModal()">離開</button>`);
+}
+function buy(kind, i) {
+  if (kind==="potion") { if (P.gold<15) return; P.gold-=15; P.potion++; }
+  else { const it = (kind==="weapon"?WEAPONS:ARMORS)[i]; if (P.gold<it.p) return; P.gold-=it.p; P[kind]=it; }
+  hud(); openShop();
+}
+function openStats() {
+  if (inBattle || over) return;
+  const row = (label, key, cost) => `<div class="row"><span>${label}</span><button onclick="spend('${key}')" ${P.pts<1?"disabled":""}>+ 1點</button></div>`;
+  openModal(`<h2>📋 勇者 Lv ${P.lv} · 能力點 ${P.pts}</h2>
+    <div class="row"><span>❤️ HP ${P.hp}/${P.mhp}</span><span>🔷 MP ${P.mp}/${P.mmp}</span></div>
+    <div class="row"><span>⚔️ 攻擊 ${tAtk()} (${P.weapon?P.weapon.n:"徒手"})</span><span>🛡️ 防禦 ${tDef()} (${P.armor?P.armor.n:"布衣"})</span></div>
+    ${row("提升 HP 上限 +6","mhp")}${row("提升 MP 上限 +3","mmp")}${row("提升 攻擊 +1","atk")}${row("提升 防禦 +1","def")}
+    <h2 style="margin-top:12px">技能</h2>
+    ${SKILLS.map(k => `<div class="row" style="opacity:${P.lv>=k.lv?1:.4}"><span>${k.n} <small>${k.d}</small></span><span>${P.lv>=k.lv?"MP "+k.mp:"Lv "+k.lv+" 解鎖"}</span></div>`).join("")}
+    <button style="margin-top:10px" onclick="closeModal()">關閉</button>`);
+}
+function spend(key) {
+  if (P.pts<1) return; P.pts--;
+  if (key==="mhp") { P.mhp+=6; P.hp+=6; } else if (key==="mmp") { P.mmp+=3; P.mp+=3; } else P[key]++;
+  hud(); openStats();
+}
+$("menuBtn").onclick = openStats;
 
 // 戰鬥外使用藥水:按 P
 function usePotion() {
   if (inBattle || over) return;
   if (P.potion<=0) return say("沒有藥水了。");
   if (P.hp>=P.mhp) return say("HP 已經是滿的。");
-  P.potion--; P.hp = Math.min(P.mhp, P.hp+20); hud(); say("🧪 使用藥水,回復 20 HP。");
+  P.potion--; P.hp = Math.min(P.mhp, P.hp+25); hud(); say("🧪 使用藥水,回復 25 HP。");
 }
 
 // ---------- 輸入 ----------
 const KEYS = { ArrowUp:[0,-1], w:[0,-1], ArrowDown:[0,1], s:[0,1], ArrowLeft:[-1,0], a:[-1,0], ArrowRight:[1,0], d:[1,0] };
 addEventListener("keydown", e => {
   if (e.key==="p"||e.key==="P") return usePotion();
+  if (e.key==="c"||e.key==="C") return $("modal").style.display==="flex" ? closeModal() : openStats();
   const d = KEYS[e.key] || KEYS[e.key.toLowerCase?.()];
   if (d) { e.preventDefault(); move(...d); }
 });
@@ -232,7 +296,7 @@ document.querySelectorAll("#pad button").forEach(b =>
   b.addEventListener("click", () => move(...b.dataset.d.split(",").map(Number))));
 
 hud(); draw();
-say("你是年輕的勇者。往南走,穿過道路,擊敗城堡裡的魔王吧!(按 P 使用藥水)");
+say("你是年輕的勇者。往南走,穿過道路,擊敗城堡裡的魔王吧!(按 P 使用藥水,C 開角色面板,🏪 商店買裝備)");
 </script>
 </body>
 </html>
