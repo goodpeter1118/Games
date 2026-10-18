@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>貪吃蛇</title>
+<style>
+  body{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#111;color:#eee;font-family:system-ui,sans-serif;touch-action:none}
+  h1{margin:8px 0;font-size:1.4rem}
+  #info{margin-bottom:8px}
+  canvas{background:#1b1b1b;border:2px solid #4caf50;border-radius:6px;max-width:92vw;height:auto}
+  .pad{display:grid;grid-template-columns:repeat(3,56px);gap:6px;margin-top:12px}
+  .pad button{height:56px;font-size:1.4rem;border:0;border-radius:10px;background:#333;color:#eee}
+  .pad button:active{background:#4caf50}
+  p{opacity:.6;font-size:.85rem}
+</style>
+</head>
+<body>
+<h1>🐍 貪吃蛇</h1>
+<div id="info">分數:<span id="score">0</span> 　最高:<span id="best">0</span></div>
+<canvas id="c" width="400" height="400"></canvas>
+<div class="pad">
+  <span></span><button data-d="U">↑</button><span></span>
+  <button data-d="L">←</button><button data-d="D">↓</button><button data-d="R">→</button>
+</div>
+<p>方向鍵 / WASD 控制,空白鍵暫停或重新開始</p>
+<script>
+const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+const N=20,S=cv.width/N;
+let snake,dir,next,food,score,over,paused,timer;
+let best=+(localStorage.getItem('snakeBest')||0);
+document.getElementById('best').textContent=best;
+
+function reset(){
+  snake=[{x:10,y:10},{x:9,y:10},{x:8,y:10}];
+  dir=next={x:1,y:0};score=0;over=false;paused=false;
+  document.getElementById('score').textContent=0;
+  placeFood();
+  clearInterval(timer);timer=setInterval(step,120);
+  draw();
+}
+function placeFood(){
+  do{food={x:Math.floor(Math.random()*N),y:Math.floor(Math.random()*N)};}
+  while(snake.some(s=>s.x===food.x&&s.y===food.y));
+}
+function step(){
+  if(over||paused)return;
+  dir=next;
+  const h={x:snake[0].x+dir.x,y:snake[0].y+dir.y};
+  if(h.x<0||h.y<0||h.x>=N||h.y>=N||snake.some(s=>s.x===h.x&&s.y===h.y)){
+    over=true;
+    if(score>best){best=score;localStorage.setItem('snakeBest',best);document.getElementById('best').textContent=best;}
+    draw();return;
+  }
+  snake.unshift(h);
+  if(h.x===food.x&&h.y===food.y){
+    score++;document.getElementById('score').textContent=score;placeFood();
+    if(score%5===0){clearInterval(timer);timer=setInterval(step,Math.max(60,120-score*3));}
+  }else snake.pop();
+  draw();
+}
+function draw(){
+  ctx.clearRect(0,0,cv.width,cv.height);
+  ctx.fillStyle='#ff5252';
+  ctx.beginPath();ctx.arc(food.x*S+S/2,food.y*S+S/2,S/2-2,0,7);ctx.fill();
+  snake.forEach((s,i)=>{ctx.fillStyle=i?'#4caf50':'#8bc34a';ctx.fillRect(s.x*S+1,s.y*S+1,S-2,S-2);});
+  if(over||paused){
+    ctx.fillStyle='rgba(0,0,0,.6)';ctx.fillRect(0,0,cv.width,cv.height);
+    ctx.fillStyle='#fff';ctx.font='28px system-ui';ctx.textAlign='center';
+    ctx.fillText(over?'遊戲結束':'暫停',200,190);
+    ctx.font='16px system-ui';ctx.fillText('按空白鍵'+(over?'重新開始':'繼續'),200,222);
+  }
+}
+const V={U:{x:0,y:-1},D:{x:0,y:1},L:{x:-1,y:0},R:{x:1,y:0}};
+function turn(d){
+  const v=V[d];
+  if(v.x!==-dir.x||v.y!==-dir.y)next=v;
+}
+function toggle(){if(over)reset();else{paused=!paused;draw();}}
+addEventListener('keydown',e=>{
+  const m={ArrowUp:'U',w:'U',ArrowDown:'D',s:'D',ArrowLeft:'L',a:'L',ArrowRight:'R',d:'R'}[e.key];
+  if(m){turn(m);e.preventDefault();}
+  else if(e.key===' '){toggle();e.preventDefault();}
+});
+document.querySelectorAll('.pad button').forEach(b=>b.addEventListener('click',()=>turn(b.dataset.d)));
+cv.addEventListener('click',()=>{if(over)reset();});
+reset();
+</script>
+</body>
+</html>
