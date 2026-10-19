@@ -186,6 +186,115 @@ const DIFFS = [
   { n:"地獄", hp:2,   atk:1.6, r:1.8, d:"極限挑戰,獎勵 +80%" },
 ];
 
+// ---------- 轉職 / 覺醒 ----------
+// 每個職業有兩條轉職路線(Lv 10 + 擊敗沙蟲),再各自覺醒一次(Lv 18 + 擊敗魔王)。
+// b 轉職時一次性加成 · g 之後每級額外成長 · sp/crit/dodge/steal 戰鬥加成 · regen/mpr 每回合回復 HP% / MP · dr 受到傷害減免
+const ADV = {
+  paladin:{ tier:1, base:"war", n:"聖騎士", i:"🤴", d:"以神聖之力守護自己,堅不可摧的重裝騎士。",
+    req:{ lv:10, clear:2, gold:1500 }, b:{ hp:40, def:4 }, g:{ hp:3, mp:1 }, dr:2, regen:.02,
+    sk:[ {id:"holy", n:"✨ 聖光治癒", lv:10, mp:8, heal:{f:.5}, d:"回復 50% HP"},
+         {id:"bulwark", n:"🛡️ 神聖庇護", lv:12, mp:10, heal:{f:.1}, dodge:3, d:"回復 10% HP 並抵擋 3 次攻擊"},
+         {id:"judge", n:"⚔️ 審判", lv:14, mp:11, m:3.8, add:[0,6], d:"3.8 倍 ATK"} ] },
+  paladin2:{ tier:2, base:"war", from:"paladin", n:"神聖守護者", i:"🤴", d:"神聖之力臻至極致,是戰場上不倒的聖壁。",
+    req:{ lv:18, clear:5, gold:5000 }, b:{ hp:80, def:6 }, g:{ hp:3, atk:1 }, dr:2, regen:.01,
+    sk:[ {id:"advent", n:"🌟 神聖降臨", lv:18, mp:18, m:3.2, aoe:true, heal:{f:.25}, d:"全體 3.2 倍 ATK,並回復 25% HP"} ] },
+  berserker:{ tier:1, base:"war", n:"狂戰士", i:"🧔", d:"用鮮血換取力量,攻擊力驚人的狂暴戰士。",
+    req:{ lv:10, clear:2, gold:1500 }, b:{ atk:8, hp:20 }, g:{ hp:3, atk:2 }, crit:.08, steal:.04,
+    sk:[ {id:"rage", n:"🔥 狂怒斬", lv:10, mp:6, m:2.8, add:[0,5], d:"2.8 倍 ATK"},
+         {id:"blood", n:"🩸 血祭", lv:12, mp:4, m:4.4, add:[0,8], selfHp:.15, d:"消耗 15% HP,4.4 倍 ATK"},
+         {id:"rampage", n:"🌪️ 破軍", lv:14, mp:12, m:2.8, add:[0,4], aoe:true, d:"全體:各 2.8 倍 ATK"} ] },
+  berserker2:{ tier:2, base:"war", from:"berserker", n:"破滅戰神", i:"🧔", d:"狂怒化為毀滅,所到之處寸草不生。",
+    req:{ lv:18, clear:5, gold:5000 }, b:{ atk:12 }, g:{ hp:2, atk:2 }, crit:.07, steal:.03,
+    sk:[ {id:"ruin", n:"💥 毀天滅地", lv:18, mp:18, m:4.2, add:[0,8], aoe:true, selfHp:.1, d:"全體:各 4.2 倍 ATK,消耗 10% HP"} ] },
+  archmage:{ tier:1, base:"mage", n:"大法師", i:"🧙‍♂️", d:"鑽研奧術的大師,魔力與威力都更上一層樓。",
+    req:{ lv:10, clear:2, gold:1500 }, b:{ mp:30, atk:3 }, g:{ mp:3, atk:1 }, sp:.15, mpr:2,
+    sk:[ {id:"arcane", n:"🔮 奧術箭", lv:10, mp:7, m:2.6, add:[0,5], d:"2.6 倍 ATK"},
+         {id:"blizzard", n:"❄️ 暴風雪", lv:12, mp:12, m:2.2, stun:.3, aoe:true, d:"全體:各 2.2 倍,可能凍結"},
+         {id:"starfall", n:"🌠 隕星", lv:14, mp:18, m:3.8, add:[0,8], aoe:true, d:"全體:各 3.8 倍 ATK"} ] },
+  archmage2:{ tier:2, base:"mage", from:"archmage", n:"星辰賢者", i:"🧙‍♂️", d:"引動星辰之力,一擊足以改變戰局。",
+    req:{ lv:18, clear:5, gold:5000 }, b:{ mp:50, atk:5 }, g:{ mp:2, atk:1 }, sp:.15, mpr:2,
+    sk:[ {id:"annih", n:"✨ 星辰湮滅", lv:18, mp:26, m:5.2, add:[0,10], aoe:true, d:"全體:各 5.2 倍 ATK"} ] },
+  warlock:{ tier:1, base:"mage", n:"暗黑術士", i:"🧛", d:"操縱毒與亡靈,以吸血和持續傷害取勝。",
+    req:{ lv:10, clear:2, gold:1500 }, b:{ hp:20, mp:15, atk:5 }, g:{ hp:2, mp:2, atk:1 }, steal:.06, sp:.08,
+    sk:[ {id:"venom", n:"☠️ 劇毒術", lv:10, mp:6, m:1.4, poison:{d:6,t:4}, d:"傷害並使敵人中毒"},
+         {id:"soul", n:"🩸 靈魂汲取", lv:12, mp:9, m:2.8, drain:true, d:"傷害並回復一半"},
+         {id:"legion", n:"👻 亡靈軍團", lv:14, mp:14, m:1.8, poison:{d:5,t:4}, aoe:true, d:"全體:傷害並使敵人中毒"} ] },
+  warlock2:{ tier:2, base:"mage", from:"warlock", n:"虛空術士", i:"🧛", d:"與虛空締約,吞噬一切生命。",
+    req:{ lv:18, clear:5, gold:5000 }, b:{ mp:30, atk:5 }, g:{ hp:2, mp:2, atk:1 }, steal:.04, sp:.1,
+    sk:[ {id:"void", n:"🌑 虛空吞噬", lv:18, mp:22, m:3.4, add:[0,8], aoe:true, drain:true, d:"全體:各 3.4 倍,並吸血"} ] },
+  assassin:{ tier:1, base:"rogue", n:"刺客", i:"🥷", d:"一擊必殺的暗影,擁有極高的暴擊。",
+    req:{ lv:10, clear:2, gold:1500 }, b:{ atk:6 }, g:{ hp:2, mp:1, atk:2 }, crit:.15, dodge:.05,
+    sk:[ {id:"backstab", n:"🗡️ 背刺", lv:10, mp:8, m:3.4, crit:true, d:"必定暴擊 3.4 倍"},
+         {id:"step", n:"🌫️ 暗影步", lv:12, mp:9, m:1.2, dodge:3, d:"攻擊並閃避接下來 3 次攻擊"},
+         {id:"mark", n:"💀 死亡標記", lv:14, mp:14, m:5, crit:true, d:"必定暴擊 5 倍"} ] },
+  assassin2:{ tier:2, base:"rogue", from:"assassin", n:"暗影之王", i:"🥷", d:"與暗影合而為一,出手便是終結。",
+    req:{ lv:18, clear:5, gold:5000 }, b:{ atk:8 }, g:{ hp:2, atk:2 }, crit:.1, dodge:.05,
+    sk:[ {id:"execute", n:"🌑 暗影斬殺", lv:18, mp:20, m:1.7, hits:4, spread:true, crit:true, add:[0,4], d:"隨機斬 4 次,必定暴擊"} ] },
+  ranger:{ tier:1, base:"rogue", n:"神射手", i:"🧝‍♂️", d:"箭無虛發,擅長群體壓制與閃避。",
+    req:{ lv:10, clear:2, gold:1500 }, b:{ atk:4, hp:15 }, g:{ hp:3, mp:1, atk:1 }, crit:.08, dodge:.08,
+    sk:[ {id:"multi", n:"🏹 多重箭", lv:10, mp:8, m:1.1, hits:3, spread:true, add:[0,3], d:"隨機射出 3 箭"},
+         {id:"arrow", n:"🌧️ 箭雨", lv:12, mp:11, m:2, add:[0,4], aoe:true, d:"全體:各 2 倍 ATK"},
+         {id:"snipe", n:"🎯 致命狙擊", lv:14, mp:13, m:4.6, crit:true, d:"必定暴擊 4.6 倍"} ] },
+  ranger2:{ tier:2, base:"rogue", from:"ranger", n:"風暴射手", i:"🧝‍♂️", d:"箭矢化為風暴,籠罩整個戰場。",
+    req:{ lv:18, clear:5, gold:5000 }, b:{ atk:6 }, g:{ hp:2, atk:1 }, crit:.08, dodge:.04,
+    sk:[ {id:"storm", n:"⚡ 暴風箭雨", lv:18, mp:20, m:1.8, hits:2, aoe:true, add:[0,5], d:"全體:各打 2 次,每次 1.8 倍"} ] },
+};
+Object.entries(ADV).forEach(([id, a]) => a.id = id);
+let _cl = null, _clk = "";
+function buildClass() {   // 基礎職業 + 轉職加成合併成目前生效的職業
+  const b = CLASSES[P.cls || "war"], e = { ...b, g:{ ...b.g }, sk:[...b.sk], steal:0, regen:0, mpr:0, dr:0 };
+  (P.adv || []).forEach(id => { const a = ADV[id];
+    e.n = a.n; e.i = a.i; e.d = a.d;
+    ["sp","crit","dodge","steal","regen","mpr","dr"].forEach(k => e[k] = (e[k] || 0) + (a[k] || 0));
+    Object.keys(a.g || {}).forEach(k => e.g[k] += a.g[k]);
+    e.sk.push(...a.sk.map(k => ({ ...k, adv:true })));
+  });
+  return e;
+}
+const CL = () => { const k = (P.cls || "war") + "|" + (P.adv || []).join(); if (k !== _clk) { _clk = k; _cl = buildClass(); } return _cl; };
+const advNext = () => { const st = (P.adv || []).length; return st === 0 ? Object.values(ADV).filter(a => a.tier === 1 && a.base === P.cls) : st === 1 ? [ADV[P.adv[0] + "2"]] : []; };
+const advReqs = a => [ [P.lv >= a.req.lv, `等級 Lv ${a.req.lv}`], [!!G.cleared[a.req.clear], `擊敗 ${AREAS[a.req.clear].boss.n}`], [P.gold >= a.req.gold, `💰 ${a.req.gold}`] ];
+const advReady = () => advNext().some(a => advReqs(a).every(r => r[0]));
+const advChips = a => {
+  const c = [], b = a.b || {};
+  if (b.hp) c.push(`❤️ HP +${b.hp}`); if (b.mp) c.push(`🔷 MP +${b.mp}`); if (b.atk) c.push(`⚔️ 攻擊 +${b.atk}`); if (b.def) c.push(`🛡️ 防禦 +${b.def}`);
+  const g = a.g || {}; const gs = [g.hp && `HP +${g.hp}`, g.mp && `MP +${g.mp}`, g.atk && `攻擊 +${g.atk}`].filter(Boolean);
+  if (gs.length) c.push(`📈 每級額外 ${gs.join(" · ")}`);
+  if (a.sp) c.push(`✨ 技能威力 +${Math.round(a.sp*100)}%`); if (a.crit) c.push(`🎯 暴擊 +${Math.round(a.crit*100)}%`); if (a.dodge) c.push(`💨 閃避 +${Math.round(a.dodge*100)}%`);
+  if (a.steal) c.push(`🦷 吸血 +${Math.round(a.steal*100)}%`); if (a.regen) c.push(`💚 每回合回復 ${Math.round(a.regen*100)}% HP`); if (a.mpr) c.push(`🔹 每回合回復 ${a.mpr} MP`); if (a.dr) c.push(`🛡️ 受到傷害 -${a.dr}`);
+  return c.map(x => `<span class="chip">${x}</span>`).join("");
+};
+function advTab() {
+  const path = [CLASSES[P.cls].n, ...(P.adv || []).map(id => ADV[id].n)].join(" → ");
+  const next = advNext();
+  const card = a => { const rq = advReqs(a), ok = rq.every(r => r[0]);
+    return `<div class="icard" style="margin-top:8px"><div class="ihead"><span class="iname">${a.i} ${a.n}</span><span class="lvb">${a.tier === 1 ? "轉職" : "覺醒"}</span></div>
+      <div style="font-size:13px;opacity:.9">${a.d}</div><div class="chips">${advChips(a)}</div>
+      <div style="font-size:12px">新技能:${a.sk.map(k => `${k.n}(Lv ${k.lv})`).join("、")}</div>
+      <div class="cmp">${rq.map(r => `<span class="chip ${r[0] ? "up" : "down"}">${r[0] ? "✔" : "✖"} ${r[1]}</span>`).join("")}</div>
+      <div class="iact"><button ${ok ? "" : "disabled"} onclick="advance('${a.id}')">${a.tier === 1 ? "轉職" : "覺醒"}為 ${a.n}</button></div></div>`; };
+  return `<div class="row"><span>🎓 職業路線</span><b>${path}</b></div>`
+    + (next.length ? `<div style="opacity:.75;margin:8px 0 2px;font-size:13px">${(P.adv || []).length === 0 ? "選擇一條轉職路線(轉職後無法更改,職業路線決定你的後續技能與被動)" : "你已經轉職,達成條件後可以再覺醒一次"}</div>${next.map(card).join("")}`
+      : `<div class="row"><span>🌟 你已達到最終型態,沒有更高的職業了。</span></div>`);
+}
+function advance(id) {
+  const a = ADV[id]; if (!a || !advNext().includes(a) || !advReqs(a).every(r => r[0])) return;
+  if (a.tier === 1 && !confirm(`確定要轉職為「${a.n}」嗎?轉職後無法更改,並會花費 💰${a.req.gold}。`)) return;
+  P.gold -= a.req.gold; P.adv = (P.adv || []).concat(id);
+  const b = a.b || {}; P.advStat = P.advStat || {};
+  ["hp","mp","atk","def"].forEach(k => P.advStat[k] = (P.advStat[k] || 0) + (b[k] || 0));
+  P.mhp += b.hp || 0; P.mmp += b.mp || 0; P.atk += b.atk || 0; P.def += b.def || 0; P.hp = P.mhp; P.mp = P.mmp;
+  hud(); draw(); save(); jingle([523,659,784,1047,1319]);
+  const learned = a.sk.filter(k => k.lv <= P.lv).map(k => k.n).join("、");
+  toast(`🎓 <b>${a.tier === 1 ? "轉職" : "覺醒"}成功!</b>你成為了 ${a.i} <b>${a.n}</b><br><small>${learned ? "習得技能:" + learned : ""}</small>`);
+  say(`🎓 你${a.tier === 1 ? "轉職" : "覺醒"}為 <b>${a.n}</b>!HP / MP 全部回復。`);
+  checkAch(); openStats(true);
+}
+function advHint() {   // 達成條件時提醒一次
+  advNext().forEach(a => { const rq = advReqs(a); G.hint = G.hint || {};
+    if (rq[0][0] && rq[1][0] && !G.hint[a.tier]) { G.hint[a.tier] = 1; toast(`🎓 你已符合${a.tier === 1 ? "轉職" : "覺醒"}條件!<br><small>角色面板 → 轉職(需要 💰${a.req.gold})</small>`); } });
+}
+
 // ---------- 章節資料 ----------
 // . 地面  # 邊界  F 障礙  ~ 水/岩漿/冰  H 旅店  S 商店  N NPC  M 夥伴  $ 寶箱  * 星之碎片  B 守護者  > 前往  < 返回
 const T = 36, N = 20;
@@ -353,15 +462,14 @@ const dodgeRate = () => Math.min(.5, CL().dodge + eqf("dodge"));
 
 // ---------- 狀態 ----------
 const P = { x:2, y:17, cls:null, hp:30, mhp:30, mp:10, mmp:10, atk:6, lv:1, xp:0, next:20, gold:0, potion:2, ether:1,
-            def:0, pts:0, eq:{}, owned:[], enh:{}, ore:0, spent:{}, party:[] };
-const G = { area:0, cleared:[], opened:{}, q:{}, comps:{}, shards:0, diff:1, mute:false, ended:false, kills:{}, streak:0, gen:{}, genSeq:0, ach:{}, tower:{ best:0 }, bestStreak:0 };
+            def:0, pts:0, eq:{}, owned:[], enh:{}, ore:0, spent:{}, adv:[], advStat:{}, advGrow:{}, party:[] };
+const G = { area:0, cleared:[], opened:{}, q:{}, comps:{}, shards:0, diff:1, mute:false, ended:false, kills:{}, streak:0, gen:{}, genSeq:0, ach:{}, tower:{ best:0 }, bestStreak:0, hint:{} };
 function equip(id) {
   const it = ITEMS[id], old = ITEMS[P.eq[it.slot]];
   const dh = (it.hp||0) - ((old && old.hp)||0), dm = (it.mp||0) - ((old && old.mp)||0);
   P.eq[it.slot] = id; P.mhp += dh; P.mmp += dm;
   P.hp = Math.min(P.mhp, Math.max(1, P.hp + Math.max(0, dh))); P.mp = Math.min(P.mmp, Math.max(0, P.mp + Math.max(0, dm)));
 }
-const CL = () => CLASSES[P.cls || "war"];
 const tAtk = () => P.atk + eqf("atk");
 const tDef = () => P.def + eqf("def");
 const A = () => AREAS[G.area];
@@ -639,8 +747,9 @@ function castSkill(k) {
     d = hurt(t, d); tot += d; hitList.push(foes.indexOf(t));
     const e = by.get(t) || { d:0, c:false }; e.d += d; e.c = e.c || c; by.set(t, e);
   };
+  if (k.selfHp) { const c = Math.round(P.mhp*k.selfHp); P.hp = Math.max(1, P.hp - c); blog(`🩸 消耗了 ${c} HP。`); }
   if (k.m) {
-    if (k.aoe) living().forEach(t => strike(t, k.m, k.add, k.crit));
+    if (k.aoe) for (let h=0;h<(k.hits||1);h++) living().forEach(t => strike(t, k.m, k.add, k.crit));
     else if (k.spread) for (let i=0;i<(k.hits||1);i++) { const L = living(); if (L.length) strike(L[rnd(0, L.length-1)], k.m, k.add, k.crit); }
     else { pickTarget(); for (let i=0;i<(k.hits||1);i++) strike(foe, k.m, k.add, k.crit); }
     blog(`${k.n}!${[...by].map(([t,e]) => `${t.n} ${e.d}${e.c ? "!" : ""}`).join("、")}`);
@@ -706,7 +815,7 @@ function playerAct(kind) {
     else if (Math.random() < 0.6) { G.streak = 0; endBattle("你成功逃跑了。"); return; }
     else blog("逃跑失敗!");
   }
-  const steal = eqf("steal");
+  const steal = eqf("steal") + (CL().steal || 0);
   if (steal && dealt > 0) { const h = Math.max(1, Math.ceil(dealt*steal)); P.hp = Math.min(P.mhp, P.hp+h); blog(`🦷 吸取了 ${h} HP。`); }
   companionTurn();
   settle();
@@ -731,6 +840,9 @@ function enemyPhase() {
 function endRound() {
   if (P.poison && P.poison.t > 0) { P.hp -= P.poison.d; P.poison.t--; blog(`${P.poison.label || "☠️ 毒發"},損失 ${P.poison.d} HP。`); }
   if (P.weak && P.weak.t > 0) P.weak.t--;
+  const c = CL();
+  if (c.regen && P.hp > 0) { const h = Math.max(1, Math.round(P.mhp*c.regen)); P.hp = Math.min(P.mhp, P.hp + h); blog(`💚 ${c.n}的被動:回復 ${h} HP。`); }
+  if (c.mpr) P.mp = Math.min(P.mmp, P.mp + c.mpr);
   if (dead()) { refreshBattle(); return lose(); }
   busy = false; refreshBattle();
 }
@@ -761,7 +873,7 @@ function avoided(f) {
   return false;
 }
 function dmgToPlayer(f, mult) {
-  const d = Math.max(1, Math.round(rnd(f.atk-2, f.atk+2) * mult) - tDef() - knightGuard());
+  const d = Math.max(1, Math.round(rnd(f.atk-2, f.atk+2) * mult) - tDef() - knightGuard() - (CL().dr || 0));
   P.hp -= d; fx($("wrap"), "flash"); beep(140,.12,"sawtooth"); return d;
 }
 function foeAct(f) {
@@ -815,6 +927,8 @@ function levelUp() {
   while (P.xp >= P.next) {
     P.xp -= P.next; P.lv++; P.next = Math.round(P.next*1.3);
     P.mhp += g.hp; P.mmp += g.mp; P.atk += g.atk; P.pts += 3; P.hp = P.mhp; P.mp = P.mmp;
+    const bg = CLASSES[P.cls].g; P.advGrow = P.advGrow || {};
+    P.advGrow.hp = (P.advGrow.hp || 0) + g.hp - bg.hp; P.advGrow.mp = (P.advGrow.mp || 0) + g.mp - bg.mp; P.advGrow.atk = (P.advGrow.atk || 0) + g.atk - bg.atk;
     msg += `<br>⭐ 升級!Lv ${P.lv}:HP +${g.hp} · MP +${g.mp} · 攻擊 +${g.atk} · 能力點 +3(按 C 配點)`;
     CL().sk.filter(k => k.lv === P.lv).forEach(k => msg += `<br>✨ 習得技能 ${k.n}!`);
     jingle([523,659,784,1047]);
@@ -885,7 +999,7 @@ function lose() {
 function endBattle(msg) {
   inBattle = false; P.poison = null; P.dodge = 0; P.stunned = 0; P.weak = null; P.revived = false; foes = []; $("battle").style.display = "none"; hud(); draw(); save(); if (msg) say(msg);
   if (tw) towerAfter(msg);
-  checkAch();
+  checkAch(); advHint();
 }
 
 // ---------- 面板 ----------
@@ -907,7 +1021,8 @@ function openTitle(pick) {
 }
 function startGame(k) {
   const c = CLASSES[k];
-  Object.assign(P, { cls:k, mhp:c.hp, hp:c.hp, mmp:c.mp, mp:c.mp, atk:c.atk });
+  Object.assign(P, { cls:k, mhp:c.hp, hp:c.hp, mmp:c.mp, mp:c.mp, atk:c.atk, adv:[], advStat:{}, advGrow:{},
+    lv:1, xp:0, next:20, gold:0, potion:2, ether:1, def:0, pts:0, eq:{}, owned:[], enh:{}, ore:0, spent:{}, party:[] });
   [P.x, P.y] = AREAS[0].from;
   closeModal(); hud(); draw(); save();
   say(`你是年輕的${c.n}。先和 🧓 村長 說話接任務,擊敗每章的守護者,穿過 🌀 傳送門,一路挑戰魔王!<br><small>P 藥水 · E 魔力水 · C 角色面板 · 進度會自動存檔</small>`);
@@ -1021,7 +1136,7 @@ function openCodex() {
 }
 const PT = { mhp:6, mmp:3, atk:1, def:1 };
 let statsTab = "stat";
-const STABS = { stat:"能力", skill:"技能", comp:"夥伴", set:"設定" };
+const STABS = { stat:"能力", skill:"技能", comp:"夥伴", adv:"轉職", set:"設定" };
 const setStatsTab = k => { statsTab = k; openStats(true); };
 function openStats(force) {
   if (inBattle && !force) return;
@@ -1030,7 +1145,9 @@ function openStats(force) {
     const n = sp[key] || 0, cur = key==="mhp" ? P.mhp : key==="mmp" ? P.mmp : key==="atk" ? tAtk() : tDef();
     return `<div class="row"><span>${label} <b>+${PT[key]}</b> <small>(${cur} → ${cur+PT[key]}) · 已投入 ${n} 點 = +${n*PT[key]}</small></span><button onclick="spend('${key}')" ${P.pts<1?"disabled":""}>+ 1點</button></div>`; };
   const part = (name, v) => v ? ` ${name} ${v>0?"+":""}${v}` : "";
-  const baseAtk = cl.atk + (P.lv-1)*cl.g.atk + (sp.atk||0), baseHp = cl.hp + (P.lv-1)*cl.g.hp + (sp.mhp||0)*6, baseMp = cl.mp + (P.lv-1)*cl.g.mp + (sp.mmp||0)*3;
+  const bc = CLASSES[P.cls], ad = P.advStat || {}, ag = P.advGrow || {};
+  const advA = (ad.atk||0) + (ag.atk||0), advH = (ad.hp||0) + (ag.hp||0), advM = (ad.mp||0) + (ag.mp||0), advD = ad.def || 0;
+  const baseAtk = bc.atk + (P.lv-1)*bc.g.atk + (sp.atk||0) + advA, baseHp = bc.hp + (P.lv-1)*bc.g.hp + (sp.mhp||0)*6 + advH, baseMp = bc.mp + (P.lv-1)*bc.g.mp + (sp.mmp||0)*3 + advM;
   const n = A().npc, s = G.q[G.area] || { i:0, st:0, c:0 }, q = n.quests[s.i];
   const qtxt = !q ? "✅ 本章委託全部完成" : s.st===0 ? `尚未接取(找 ${n.i}${n.n})` : `${q.txt}(${s.c}/${q.n})`;
   const comps = Object.keys(COMPS).filter(id => G.comps[id]);
@@ -1041,13 +1158,14 @@ function openStats(force) {
     <div class="row"><span>📈 每升 1 級</span><span>HP +${cl.g.hp} · MP +${cl.g.mp} · 攻擊 +${cl.g.atk} · 能力點 +3</span></div>
     ${row("提升 HP 上限","mhp")}${row("提升 MP 上限","mmp")}${row("提升 攻擊","atk")}${row("提升 防禦","def")}
     <h2 style="margin-top:12px">數值組成</h2>
-    <div class="row"><span>❤️ HP 上限 ${P.mhp}</span><small>職業 ${cl.hp} + 升級 ${(P.lv-1)*cl.g.hp} + 配點 ${(sp.mhp||0)*6} + 裝備 ${eqf("hp")}${part("其他", P.mhp-baseHp-eqf("hp"))}</small></div>
-    <div class="row"><span>🔷 MP 上限 ${P.mmp}</span><small>職業 ${cl.mp} + 升級 ${(P.lv-1)*cl.g.mp} + 配點 ${(sp.mmp||0)*3} + 裝備 ${eqf("mp")}${part("其他", P.mmp-baseMp-eqf("mp"))}</small></div>
-    <div class="row"><span>⚔️ 攻擊 ${tAtk()}</span><small>職業 ${cl.atk} + 升級 ${(P.lv-1)*cl.g.atk} + 配點 ${sp.atk||0} + 裝備 ${eqf("atk")}${part("其他", P.atk-baseAtk)}</small></div>
-    <div class="row"><span>🛡️ 防禦 ${tDef()}</span><small>配點 ${sp.def||0} + 裝備 ${eqf("def")}${part("其他", P.def-(sp.def||0))}</small></div>
+    <div class="row"><span>❤️ HP 上限 ${P.mhp}</span><small>職業 ${bc.hp} + 升級 ${(P.lv-1)*bc.g.hp} + 配點 ${(sp.mhp||0)*6}${advH ? " + 轉職 "+advH : ""} + 裝備 ${eqf("hp")}${part("其他", P.mhp-baseHp-eqf("hp"))}</small></div>
+    <div class="row"><span>🔷 MP 上限 ${P.mmp}</span><small>職業 ${bc.mp} + 升級 ${(P.lv-1)*bc.g.mp} + 配點 ${(sp.mmp||0)*3}${advM ? " + 轉職 "+advM : ""} + 裝備 ${eqf("mp")}${part("其他", P.mmp-baseMp-eqf("mp"))}</small></div>
+    <div class="row"><span>⚔️ 攻擊 ${tAtk()}</span><small>職業 ${bc.atk} + 升級 ${(P.lv-1)*bc.g.atk} + 配點 ${sp.atk||0}${advA ? " + 轉職 "+advA : ""} + 裝備 ${eqf("atk")}${part("其他", P.atk-baseAtk)}</small></div>
+    <div class="row"><span>🛡️ 防禦 ${tDef()}</span><small>配點 ${sp.def||0}${advD ? " + 轉職 "+advD : ""} + 裝備 ${eqf("def")}${part("其他", P.def-(sp.def||0)-advD)}</small></div>
     <h2 style="margin-top:12px">本章任務</h2><div class="row"><span>📜 ${qtxt}</span></div>`;
+  else if (statsTab === "adv") body = advTab();
   else if (statsTab === "skill") body = `<div style="opacity:.75;margin-bottom:4px">${cl.i} ${cl.n}的技能(等級到了會自動習得)</div>`
-    + cl.sk.map(k => `<div class="row" style="opacity:${P.lv>=k.lv?1:.45}"><span>${k.n} <small>${k.d}</small></span><span>${P.lv>=k.lv ? "MP "+k.mp : "Lv "+k.lv+" 解鎖"}</span></div>`).join("");
+    + cl.sk.map(k => `<div class="row" style="opacity:${P.lv>=k.lv?1:.45}"><span>${k.n}${k.adv ? " <small>(轉職)</small>" : ""} <small>${k.d}</small></span><span>${P.lv>=k.lv ? "MP "+k.mp : "Lv "+k.lv+" 解鎖"}</span></div>`).join("");
   else if (statsTab === "comp") body = `<div style="opacity:.75;margin-bottom:4px">最多同時出戰 2 位夥伴;出戰拿 60% 經驗,待命拿 30%。</div>`
     + (comps.length ? comps.map(id => `<div class="row"><span>${COMPS[id].i} ${COMPS[id].n} <b>Lv ${compLv(id)}</b> <small>XP ${G.comps[id].xp}/${compXpNeed(compLv(id))}<br>${compDesc(id)}</small></span>
       <button onclick="togglePartner('${id}')">${P.party.includes(id) ? "✔ 出戰中" : "待命"}</button></div>`).join("")
@@ -1057,7 +1175,7 @@ function openStats(force) {
     <div class="seg"><button onclick="toggleMute()">${G.mute ? "🔇 音效:關" : "🔊 音效:開"}</button><button onclick="newGame()">🔄 新遊戲</button></div>
     <div style="opacity:.6;font-size:13px;margin-top:8px">快捷鍵:方向鍵/WASD 移動 · C 角色 · I 裝備 · B 圖鑑 · V 成就 · T 試煉之塔 · P 藥水 · E 魔力水</div>`;
   openModal(`<h2>${cl.i} ${cl.n} Lv ${P.lv} · 能力點 ${P.pts}</h2>
-    <div class="tabs">${Object.entries(STABS).map(([k,nm]) => `<button class="${k===statsTab?"on":""}" onclick="setStatsTab('${k}')">${nm}${k==="stat" && P.pts ? " ●" : ""}</button>`).join("")}</div>
+    <div class="tabs">${Object.entries(STABS).map(([k,nm]) => `<button class="${k===statsTab?"on":""}" onclick="setStatsTab('${k}')">${nm}${(k==="stat" && P.pts) || (k==="adv" && advReady()) ? " ●" : ""}</button>`).join("")}</div>
     ${body}
     <div class="actbar"><button onclick="closeModal()">關閉</button><button onclick="openEquip()">🎒 裝備</button><button onclick="openCodex()">📖 圖鑑</button><button onclick="openAch()">🏆 成就</button><button onclick="closeModal();openTower()">🗼 試煉之塔</button></div>`);
 }
@@ -1117,6 +1235,8 @@ const ACH = [
   { id:"gold", n:"黃金獵人", d:"打倒黃金史萊姆",           ok:() => (G.kills["黃金史萊姆"]||0) >= 1, r:{ pts:1 } },
   { id:"st",   n:"連戰連勝", d:"達成 20 連勝",             ok:() => (G.bestStreak||0) >= 20, r:{ pts:2 } },
   { id:"cp",   n:"最佳拍檔", d:"讓一位夥伴升到 Lv 15",     ok:() => Object.values(G.comps).some(c => c && c.lv >= 15), r:{ pts:3 } },
+  { id:"adv1",  n:"嶄新的道路", d:"完成轉職",                ok:() => (P.adv || []).length >= 1, r:{ pts:3 } },
+  { id:"adv2",  n:"臻於極致",   d:"完成覺醒",                ok:() => (P.adv || []).length >= 2, r:{ pts:5 } },
   { id:"t10",  n:"塔下勇士", d:"試煉之塔抵達第 10 層",     ok:() => G.tower.best >= 10,  r:{ pts:2 } },
   { id:"t30",  n:"塔中豪傑", d:"試煉之塔抵達第 30 層",     ok:() => G.tower.best >= 30,  r:{ pts:4 } },
   { id:"t50",  n:"登塔之王", d:"試煉之塔抵達第 50 層",     ok:() => G.tower.best >= 50,  r:{ pts:6 } },
