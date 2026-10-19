@@ -747,7 +747,10 @@ function endBattle(msg) {
 }
 
 // ---------- 面板 ----------
-function openModal(html) { const m = $("modal"); m.innerHTML = html; m.style.display = "flex"; inBattle = true; }
+function openModal(html) {   // 面板已開著時重繪,保留捲動位置
+  const m = $("modal"), keep = m.style.display === "flex" ? m.scrollTop : 0;
+  m.innerHTML = html; m.style.display = "flex"; inBattle = true; m.scrollTop = keep;
+}
 function closeModal() { $("modal").style.display = "none"; inBattle = false; hud(); }
 
 function openTitle(pick) {
@@ -843,8 +846,8 @@ function openCodex() {
     ${rows}<button style="margin-top:10px" onclick="closeModal()">關閉</button>`);
 }
 const PT = { mhp:6, mmp:3, atk:1, def:1 };
-function openStats() {
-  if (inBattle) return;
+function openStats(force) {
+  if (inBattle && !force) return;
   const cl = CL(), sp = P.spent || {};
   const row = (label, key) => {
     const n = sp[key] || 0, cur = key==="mhp" ? P.mhp : key==="mmp" ? P.mmp : key==="atk" ? tAtk() : tDef();
@@ -879,16 +882,16 @@ function spend(key) {
   if (P.pts<1) return; P.pts--;
   P.spent = P.spent || {}; P.spent[key] = (P.spent[key]||0) + 1;
   if (key==="mhp") { P.mhp+=6; P.hp+=6; } else if (key==="mmp") { P.mmp+=3; P.mp+=3; } else P[key]++;
-  hud(); save(); openStats();
+  hud(); save(); openStats(true);
 }
 function togglePartner(id) {
   const i = P.party.indexOf(id);
   if (i >= 0) P.party.splice(i,1);
   else { if (P.party.length >= 2) P.party.shift(); P.party.push(id); }
-  hud(); save(); closeModal(); openStats();
+  hud(); save(); openStats(true);
 }
-function setDiff(i) { G.diff = i; hud(); save(); closeModal(); openStats(); }
-function toggleMute() { G.mute = !G.mute; save(); closeModal(); openStats(); }
+function setDiff(i) { G.diff = i; hud(); save(); openStats(true); }
+function toggleMute() { G.mute = !G.mute; save(); openStats(true); }
 $("menuBtn").onclick = openStats;
 
 // 戰鬥外使用道具:P 藥水 / E 魔力水
