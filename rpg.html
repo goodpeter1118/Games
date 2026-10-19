@@ -124,10 +124,32 @@ const CLASSES = {
          {id:"rain",  n:"🌧️ 百裂箭", lv:9, mp:13, m:.8, hits:5, add:[0,2], spread:true, d:"隨機射出 5 箭"} ] },
 };
 const COMPS = {
-  wolf:  { n:"白狼", i:"🐺", d:"每回合咬擊敵人", need:() => qDone(0,1), needTxt:"先完成村長的第一個託付,我才信得過你。" },
-  fairy: { n:"妖精", i:"🧚", d:"每回合為你療傷", need:() => G.cleared[1], needTxt:"打倒巨型蜘蛛吧,牠把我的族人都關起來了……" },
-  knight:{ n:"騎士", i:"💂", d:"30% 機率擋下攻擊", need:() => qDone(5,1), needTxt:"幫流浪騎士解決魔騎士,他會認可你。" },
+  wolf:  { n:"白狼", i:"🐺", d:"每回合咬擊敵人", need:() => qDone(0,1), needTxt:"先完成村長的第一個託付,我才信得過你。",
+    perks:[[1,"每回合咬擊(傷害隨等級提升)"],[5,"咬擊使敵人流血"],[10,"同時咬擊兩個目標"],[15,"傷害 +25%"]] },
+  fairy: { n:"妖精", i:"🧚", d:"每回合為你療傷", need:() => G.cleared[1], needTxt:"打倒巨型蜘蛛吧,牠把我的族人都關起來了……",
+    perks:[[1,"每回合療傷(回復量隨等級提升)"],[5,"療傷時解除中毒/灼燒"],[10,"每回合回復少量 MP"],[15,"你倒下時復活一次(每場戰鬥)"]] },
+  knight:{ n:"騎士", i:"💂", d:"機率擋下攻擊", need:() => qDone(5,1), needTxt:"幫流浪騎士解決魔騎士,他會認可你。",
+    perks:[[1,"30% 機率擋下攻擊(每級 +1%,上限 55%)"],[5,"減少你受到的傷害"],[10,"擋下攻擊時反擊"],[15,"減傷再提升"]] },
 };
+const compLv = id => (G.comps[id] && G.comps[id].lv) || 1;
+const compXpNeed = lv => Math.round(15 * Math.pow(1.28, lv-1));
+function compDesc(id) {
+  const lv = compLv(id), pk = COMPS[id].perks, next = pk.find(p => p[0] > lv);
+  return pk.filter(p => p[0] <= lv).map(p => p[1]).join("、") + (next ? ` · Lv ${next[0]} 解鎖:${next[1]}` : "");
+}
+function compGain(total) {   // 出戰夥伴獲得 60% 經驗,待命夥伴 30%
+  let msg = "";
+  Object.keys(G.comps).forEach(id => {
+    const c = G.comps[id]; if (!c) return;
+    c.xp += Math.round(total * (P.party.includes(id) ? .6 : .3));
+    while (c.lv < 30 && c.xp >= compXpNeed(c.lv)) {
+      c.xp -= compXpNeed(c.lv); c.lv++;
+      const pk = COMPS[id].perks.find(p => p[0] === c.lv);
+      msg += `<br>${COMPS[id].i} ${COMPS[id].n} 升到 Lv ${c.lv}!${pk ? " 解鎖:" + pk[1] : ""}`; jingle([523,659,784]);
+    }
+  });
+  return msg;
+}
 const DIFFS = [
   { n:"簡單", hp:.75, atk:.8,  r:1,   d:"敵人較弱" },
   { n:"普通", hp:1.1, atk:1.05, r:1,   d:"標準體驗" },
@@ -149,61 +171,71 @@ const THEMES = {
   temple: { f:["#c9b36a","#d3bd75"], deco:"✨", obs:["🏛️","#8a7a3f"], liq:["🔮","#3a2f7a"], h:"⛩️", bg:"#1f1a0a" },
   void:   { f:["#1a1033","#20143d"], deco:"⭐", obs:["🌌","#0c0820"], liq:["⚫","#05020f"], h:"🌠", bg:"#05020f" },
 };
-const E = (n,i,hp,atk,xp,g,tr) => ({ n, i, hp, atk, xp, g, tr });
+const ESKILL = {
+  venom:{n:"毒牙",i:"☠️",t:"攻擊可能使你中毒"}, crit:{n:"致命",i:"🎯",t:"可能打出致命一擊"}, regen:{n:"再生",i:"✨",t:"會自我修復"},
+  bash:{n:"重擊",i:"💥",p:.18,t:"重擊並使你下回合無法行動"}, multi:{n:"連擊",i:"⚔️",p:.3,t:"連續攻擊兩次"},
+  drain:{n:"吸血",i:"🩸",p:.3,t:"攻擊並回復自己"}, fire:{n:"火焰",i:"🔥",p:.3,t:"強力灼燒,使你持續受傷"},
+  curse:{n:"詛咒",i:"🌀",p:.25,t:"3 回合內降低你造成的傷害"}, guard:{n:"防禦",i:"🛡️",p:.2,t:"防禦姿態,減半受到的下一次傷害"},
+  barrier:{n:"護盾",i:"🔰",p:.2,t:"為自己張開護盾"}, rally:{n:"鼓舞",i:"📣",p:.25,t:"治療同伴"},
+  steal:{n:"偷竊",i:"💰",p:.3,t:"偷走你的金幣,打倒牠可奪回"}, boom:{n:"自爆",i:"💣",t:"瀕死時自爆,不給獎勵"},
+};
+const ACTIVE = ["bash","multi","drain","fire","curse","guard","barrier","rally","steal"];
+const LEGACY = { poison:"venom", heal:"regen" };
+const E = (n,i,hp,atk,xp,g,sk) => ({ n, i, hp, atk, xp, g, sk:[].concat(sk || []).map(x => LEGACY[x] || x) });
 const Q = (k,n,r,say) => ({ k, n, txt:`擊敗 ${n} 隻${k}`, r, say });
 const AREAS = [
   { name:"翠綠草原", th:"grass", rate:.13, from:[2,17],
-    e:[E("史萊姆","🟢",12,3,6,4), E("哥布林","👺",20,5,10,8), E("野狼","🐺",22,6,12,9)],
-    boss:{ sum:{ every:3, n:2, e:E("史萊姆","🟢",12,3,0,0) }, drop:"d_slime", n:"史萊姆王", i:"👑", hp:70, atk:8, xp:50, g:60, boss:true },
+    e:[E("史萊姆","🟢",12,3,6,4), E("哥布林","👺",20,5,10,8,"steal"), E("野狼","🐺",22,6,12,9,"multi"), E("野豬","🐗",28,6,14,10,"bash"), E("毒蘑菇","🍄",18,5,11,8,"venom")],
+    boss:{ sum:{ every:3, n:2, e:E("史萊姆","🟢",12,3,0,0) }, drop:"d_slime", sk:["bash"], n:"史萊姆王", i:"👑", hp:70, atk:8, xp:50, g:60, boss:true },
     gate:{ b:[18,2], p:[18,1] }, H:[4,15], S:[6,15], $:[[15,16],[10,5]], comp:{ id:"wolf", at:[8,9] },
     npc:{ at:[3,12], n:"村長", i:"🧓", wait:"還沒完成呢,加油!", after:"往東北方走,打倒史萊姆王就能前往森林。",
       quests:[ Q("史萊姆",3,{g:40,pts:1},"年輕人,魔王的陰影正籠罩大地……先幫我清掉草原上的史萊姆吧。"),
                Q("哥布林",5,{g:80,potion:2,ether:1},"哥布林偷了我們的糧食,再麻煩你教訓牠們一下。") ] } },
   { name:"幽暗森林", th:"forest", rate:.14, from:[2,18], pb:[1,18],
-    e:[E("蝙蝠","🦇",22,7,14,10), E("毒蜘蛛","🕷️",30,8,18,13,"poison"), E("樹精","🌲",38,9,22,16)],
-    boss:{ sum:{ every:3, n:2, e:E("小蜘蛛","🕷️",16,6,0,0,"poison") }, drop:"d_web", n:"巨型蜘蛛", i:"🕸️", hp:130, atk:12, xp:100, g:100, boss:true, tr:"poison" },
+    e:[E("蝙蝠","🦇",22,7,14,10,"drain"), E("毒蜘蛛","🕷️",30,8,18,13,"venom"), E("樹精","🌲",38,9,22,16,"guard"), E("食人花","🌺",34,9,20,15,["venom","guard"]), E("狐妖","🦊",30,9,21,15,["curse","crit"])],
+    boss:{ sum:{ every:3, n:2, e:E("小蜘蛛","🕷️",16,6,0,0,"poison") }, drop:"d_web", sk:["venom","multi"], n:"巨型蜘蛛", i:"🕸️", hp:130, atk:12, xp:100, g:100, boss:true },
     gate:{ b:[2,2], p:[1,2] }, H:[17,10], S:[10,10], $:[[8,3],[16,4]], star:[18,18], comp:{ id:"fairy", at:[4,10] },
     npc:{ at:[15,16], n:"獵人", i:"🏹", wait:"還沒完成呢,加油!", after:"森林西北角有隻巨型蜘蛛守著傳送門,小心牠的毒。",
       quests:[ Q("毒蜘蛛",4,{g:70,potion:2},"最近毒蜘蛛猖獗,我的陷阱全被破壞了,能幫我處理嗎?"),
                Q("蝙蝠",6,{g:120,pts:2},"夜裡蝙蝠吵得我睡不著,再幫我一個忙吧。") ] } },
   { name:"灼熱沙漠", th:"desert", rate:.14, from:[17,18], pb:[18,18],
-    e:[E("蠍子","🦂",44,11,26,18,"poison"), E("木乃伊","🧟",56,12,30,22), E("沙盜","🥷",50,13,32,26,"crit")],
-    boss:{ drop:"d_sand", n:"沙蟲", i:"🪱", hp:220, atk:16, xp:160, g:160, boss:true },
+    e:[E("蠍子","🦂",44,11,26,18,"venom"), E("木乃伊","🧟",56,12,30,22,"curse"), E("沙盜","🥷",50,13,32,26,["steal","crit"]), E("響尾蛇","🐍",42,12,28,20,["venom","multi"]), E("火精靈","🔥",46,13,30,22,"fire"), E("仙人掌怪","🌵",60,11,31,22,["guard","bash"])],
+    boss:{ drop:"d_sand", sk:["bash","guard"], n:"沙蟲", i:"🪱", hp:220, atk:16, xp:160, g:160, boss:true },
     gate:{ b:[2,10], p:[1,10] }, H:[9,9], S:[11,9], $:[[4,4],[16,12]], star:[2,18],
     npc:{ at:[14,3], n:"商旅", i:"🧳", wait:"還沒完成呢,加油!", after:"沙蟲棲息在西邊,牠的傳送門通往雪山。",
       quests:[ Q("蠍子",4,{g:120,pts:2},"我的駱駝隊被蠍子衝散了……拜託你幫忙清掉牠們!"),
                Q("木乃伊",4,{g:200,pts:2,ether:2},"古墓裡的木乃伊醒了,貨物全被牠們搶走了。") ] } },
   { name:"冰封雪山", th:"snow", rate:.14, from:[2,1], pb:[1,1],
-    e:[E("冰狼","🐺",64,15,38,28,"crit"), E("雪怪","🦍",80,16,46,34), E("冰靈","🧊",58,18,42,32,"heal")],
-    boss:{ sum:{ every:4, n:1, e:E("冰靈","🧊",58,18,0,0,"heal") }, drop:"d_ice", n:"冰龍", i:"🐲", hp:340, atk:20, xp:260, g:260, boss:true },
+    e:[E("冰狼","🐺",64,15,38,28,["multi","crit"]), E("雪怪","🦍",80,16,46,34,"bash"), E("冰靈","🧊",58,18,42,32,["regen","barrier"]), E("雪人","⛄",72,15,40,30,"guard"), E("寒霜術士","🥶",56,17,42,32,["curse","barrier"])],
+    boss:{ sum:{ every:4, n:1, e:E("冰靈","🧊",58,18,0,0,"heal") }, drop:"d_ice", sk:["bash","barrier"], n:"冰龍", i:"🐲", hp:340, atk:20, xp:260, g:260, boss:true },
     gate:{ b:[10,18], p:[10,19] }, H:[3,10], S:[5,10], $:[[17,2],[8,15]], star:[18,10],
     npc:{ at:[16,6], n:"登山客", i:"🧗", wait:"還沒完成呢,加油!", after:"南邊的冰龍守著通往洞窟的傳送門,牠的吐息很痛。",
       quests:[ Q("雪怪",3,{g:200,pts:2,potion:3},"雪怪堵住了登山路線,你看起來身手不錯,能幫我嗎?"),
                Q("冰靈",5,{g:300,pts:3},"山頂的冰靈會不斷自我修復,得靠你連續擊破了。") ] } },
   { name:"地下洞窟", th:"cave", rate:.15, from:[17,1], pb:[18,1],
-    e:[E("骷髏兵","💀",72,18,52,38), E("石魔像","🗿",110,19,62,46), E("幽靈","👻",84,22,64,50,"heal")],
-    boss:{ sum:{ every:4, n:1, e:E("石魔像","🗿",110,19,0,0) }, drop:"d_belt", n:"洞窟巨人", i:"🧌", hp:480, atk:24, xp:400, g:400, boss:true },
+    e:[E("骷髏兵","💀",72,18,52,38,"multi"), E("石魔像","🗿",110,19,62,46,["guard","bash"]), E("幽靈","👻",84,22,64,50,["drain","curse"]), E("炸彈怪","💣",60,16,48,36,"boom"), E("岩漿蠑螈","🦎",78,20,56,42,"fire")],
+    boss:{ sum:{ every:4, n:1, e:E("石魔像","🗿",110,19,0,0) }, drop:"d_belt", sk:["bash","guard"], n:"洞窟巨人", i:"🧌", hp:480, atk:24, xp:400, g:400, boss:true },
     gate:{ b:[1,18], p:[0,18] }, H:[12,5], S:[9,10], $:[[2,3],[16,16]], star:[10,1],
     npc:{ at:[4,6], n:"礦工", i:"⛏️", wait:"還沒完成呢,加油!", after:"再往西南就是巨人的老窩,通過後就是魔王城。",
       quests:[ Q("石魔像",4,{g:300,pts:3},"石魔像把礦道全堵死了!只要能清掉牠們,我就不虧待你。"),
                Q("幽靈",5,{g:400,pts:3},"礦道深處鬧鬼,工人都不敢進去……") ] } },
   { name:"魔王城", th:"castle", rate:.16, from:[10,18], pb:[10,19],
-    e:[E("魔騎士","🛡️",130,25,90,60), E("惡魔","😈",110,28,100,70,"crit"), E("龍騎兵","🐉",150,27,110,80,"poison")],
-    boss:{ sum:{ every:3, n:2, e:E("惡魔","😈",110,28,0,0,"crit") }, drop:"d_horn", n:"魔王", i:"👹", hp:650, atk:28, xp:200, g:300, boss:true, rage:true },
+    e:[E("魔騎士","🛡️",130,25,90,60,["bash","guard"]), E("惡魔","😈",110,28,100,70,["fire","crit"]), E("龍騎兵","🐉",150,27,110,80,["fire","multi"]), E("暗影刺客","🦹",100,29,95,66,["multi","steal"]), E("邪教徒","👤",105,24,92,64,["curse","rally"])],
+    boss:{ sum:{ every:3, n:2, e:E("惡魔","😈",110,28,0,0,"crit") }, drop:"d_horn", sk:["fire","curse","drain"], n:"魔王", i:"👹", hp:650, atk:28, xp:200, g:300, boss:true, rage:true },
     gate:{ b:[10,2], p:[10,1] }, H:[3,10], S:[16,10], $:[[3,3],[17,3]], comp:{ id:"knight", at:[14,14] },
     npc:{ at:[6,10], n:"流浪騎士", i:"🧔", wait:"還沒完成呢,加油!", after:"魔王就在王座上。聽說,魔王身後的傳送門需要「星之碎片」才能開啟……",
       quests:[ Q("魔騎士",5,{g:400,pts:3,potion:3},"我曾與魔王交手……他在身負重傷時會狂暴。先清掉他的魔騎士近衛吧。"),
                Q("惡魔",5,{g:600,pts:4,potion:5},"惡魔們還在城裡作亂,這是最後的請求。") ] } },
   { name:"失落神殿", th:"temple", rate:.16, from:[2,18], pb:[1,18], req:{ shards:4 }, hidden:true,
-    e:[E("石像守衛","🗽",190,32,130,100), E("神殿祭司","🧙‍♂️",150,35,140,110,"heal"), E("聖甲蟲","🪲",170,34,135,105,"poison")],
-    boss:{ sum:{ every:3, n:2, e:E("聖甲蟲","🪲",170,34,0,0,"poison") }, drop:"d_heart", n:"遠古巨龍", i:"🐉", hp:900, atk:36, xp:600, g:600, boss:true, rage:true },
+    e:[E("石像守衛","🗽",190,32,130,100,["guard","bash"]), E("神殿祭司","🧙‍♂️",150,35,140,110,["barrier","rally"]), E("聖甲蟲","🪲",170,34,135,105,["venom","multi"]), E("獅身像","🦁",185,36,145,115,["multi","bash"]), E("亡靈","☠️",160,35,142,112,["drain","curse"])],
+    boss:{ sum:{ every:3, n:2, e:E("聖甲蟲","🪲",170,34,0,0,"poison") }, drop:"d_heart", sk:["fire","multi","barrier"], n:"遠古巨龍", i:"🐉", hp:900, atk:36, xp:600, g:600, boss:true, rage:true },
     gate:{ b:[18,2], p:[18,1] }, H:[4,10], S:[6,10], $:[[16,16],[12,6]],
     npc:{ at:[10,14], n:"神殿守護者", i:"🧙‍♀️", wait:"還沒完成呢,加油!", after:"勇者啊,深淵之門在巨龍身後。",
       quests:[ Q("石像守衛",4,{g:500,pts:3},"外人竟能踏入這裡……證明你的實力,擊碎那些失控的石像。"),
                Q("神殿祭司",4,{g:800,pts:4},"祭司們被黑暗腐化了,請讓他們安息。") ] } },
   { name:"星辰深淵", th:"void", rate:.17, from:[17,18], pb:[18,18], last:true, hidden:true,
-    e:[E("虛空行者","👁️",220,38,160,130), E("星靈","🌠",200,41,170,140,"crit"), E("深淵魔","🦑",260,40,180,150,"poison")],
-    boss:{ sum:{ every:3, n:2, e:E("虛空行者","👁️",220,38,0,0) }, drop:"d_void", n:"虛空之主", i:"🌑", hp:1400, atk:44, xp:0, g:1500, boss:true, rage:true },
+    e:[E("虛空行者","👁️",220,38,160,130,"curse"), E("星靈","🌠",200,41,170,140,["fire","crit"]), E("深淵魔","🦑",260,40,180,150,["drain","venom"]), E("虛空觸手","🐙",240,42,175,145,["multi","steal"]), E("虛空水晶","🔮",230,36,172,142,["barrier","rally"]), E("吞噬者","👾",210,39,168,138,["drain","boom"])],
+    boss:{ sum:{ every:3, n:2, e:E("虛空行者","👁️",220,38,0,0) }, drop:"d_void", sk:["curse","drain","fire"], n:"虛空之主", i:"🌑", hp:1400, atk:44, xp:0, g:1500, boss:true, rage:true },
     gate:{ b:[10,2], p:null }, H:[9,10], S:[11,10], $:[[3,15],[16,5]],
     npc:{ at:[4,6], n:"星之旅人", i:"🌟", wait:"還沒完成呢,加油!", after:"盡頭的虛空之主,就是一切的終點。",
       quests:[ Q("虛空行者",4,{g:800,pts:4},"星辰之間的裂縫不斷吐出虛空行者……"),
@@ -357,6 +389,7 @@ function load() {
   try { const s = JSON.parse(localStorage.getItem(SAVE)); if (!s || !s.P || !s.P.cls) return false;
     Object.assign(P, s.P); Object.assign(G, s.G);
     Object.values(G.gen || {}).forEach(it => ITEMS[it.id] = it);
+    Object.keys(G.comps || {}).forEach(id => { if (G.comps[id] === true) G.comps[id] = { lv:Math.max(1, Math.floor(P.lv*.7)), xp:0 }; });
     if (!s.P.eq) {   // 舊存檔:換成同章節的職業專屬裝備
       const old = { weapon:P.weapon, armor:P.armor }; delete P.weapon; delete P.armor; P.eq = {}; P.owned = [];
       Object.keys(old).forEach(sl => { const o = old[sl], it = o && ITEMLIST.find(x => x.slot===sl && x.cls===P.cls && x.t===o.t);
@@ -453,7 +486,8 @@ function mk(e, elite) {
   const f = { ...e, base:e.n };
   f.hp = f.mhp = Math.round(e.hp*d.hp); f.atk = Math.round(e.atk*d.atk);
   f.xp = Math.round(e.xp*d.r); f.g = Math.round(e.g*d.r);
-  if (elite) { f.n = "精英" + e.n; f.hp = f.mhp = Math.round(f.hp*1.4); f.atk = Math.round(f.atk*1.3); f.xp *= 2; f.g *= 2; f.elite = true; }
+  if (elite) { f.n = "精英" + e.n; f.hp = f.mhp = Math.round(f.hp*1.4); f.atk = Math.round(f.atk*1.3); f.xp *= 2; f.g *= 2; f.elite = true;
+    const extra = ACTIVE.filter(x => !f.sk.includes(x)); f.sk = [...f.sk, extra[rnd(0, extra.length-1)]]; }
   return f;
 }
 
@@ -502,7 +536,7 @@ function talkComp() {
   if (G.comps[c.id]) body = `${def.i} ${def.n}:「我會陪著你。」(在角色面板可以調整出戰夥伴)`;
   else if (!def.need()) body = `${def.i} ${def.n}:「${def.needTxt}」`;
   else {
-    G.comps[c.id] = true;
+    G.comps[c.id] = { lv:Math.max(1, Math.floor(P.lv*.7)), xp:0 };
     if (P.party.length < 2) P.party.push(c.id);
     body = `${def.i} <b>${def.n}</b> 加入了隊伍!<br>能力:${def.d}。<br><small>最多同時出戰 2 位夥伴,可在角色面板調整。</small>`;
     jingle([523,659,784,1047]);
@@ -524,7 +558,7 @@ function renderFoes() {
   const box = $("foes"), n = foes.length;
   box.style.setProperty("--fs", n===1 ? "clamp(64px,16vw,110px)" : n===2 ? "clamp(52px,12vw,86px)" : "clamp(40px,9vw,66px)");
   box.innerHTML = foes.map((f,i) => `<div class="fo ${i===tgt && f.hp>0 ? "sel" : ""} ${f.hp<=0 ? "dead" : ""}" id="fo${i}" onclick="selectTarget(${i})">
-    <span class="ic">${f.i}</span><small>${f.n}${f.summoned ? "(召喚)" : ""}${f.stun ? " 💫" : ""}${f.poison && f.poison.t>0 ? " ☠️" : ""}</small>
+    <span class="ic">${f.i}</span><small>${f.n}${f.summoned ? "(召喚)" : ""}${f.stun ? " 💫" : ""}${f.poison && f.poison.t>0 ? " ☠️" : ""}${f.guard ? " 🛡️" : ""}${f.shield>0 ? " 🔰" : ""}</small><small style="opacity:.85" title="${(f.sk||[]).map(id => ESKILL[id].n+":"+ESKILL[id].t).join(" / ")}">${(f.sk||[]).map(id => ESKILL[id].i).join("")}</small>
     <div class="bar" style="width:90px;margin:4px auto 0;height:8px"><i style="width:${Math.max(0,f.hp/f.mhp*100)}%;background:var(--hp)"></i></div></div>`).join("");
 }
 function groupFor() {
@@ -535,11 +569,12 @@ function groupFor() {
 }
 function startBattle(list) {
   foes = list; foes.forEach(f => f.turn = 0); tgt = 0; foe = foes[0];
-  inBattle = true; busy = false; P.poison = null; P.dodge = 0;
+  inBattle = true; busy = false; P.poison = null; P.dodge = 0; P.stunned = 0; P.weak = null; P.revived = false;
   $("battle").style.display = "flex";
   $("battle").style.background = THEMES[A().th].bg + "f2";
   const names = {}; foes.forEach(f => names[f.n] = (names[f.n]||0) + 1);
-  $("blog").innerHTML = `${foes.some(f => f.elite) ? "⚠️ " : ""}${Object.entries(names).map(([n,c]) => c>1 ? n+" x"+c : n).join("、")} 出現了!${foes.length>1 ? "<br><small>點選敵人可指定目標;標有「全體」的技能會打到所有敵人。</small>" : ""}`;
+  const known = [...new Set(foes.flatMap(f => (f.sk||[]).filter(id => ACTIVE.includes(id) || id === "boom")))];
+  $("blog").innerHTML = `${foes.some(f => f.elite) ? "⚠️ " : ""}${Object.entries(names).map(([n,c]) => c>1 ? n+" x"+c : n).join("、")} 出現了!${known.length ? "<br><small>敵人技能:"+known.map(id => ESKILL[id].i+ESKILL[id].n).join(" ")+"</small>" : ""}${foes.length>1 ? "<br><small>點選敵人可指定目標;標有「全體」的技能會打到所有敵人。</small>" : ""}`;
   refreshBattle();
 }
 function renderCmds() {
@@ -567,7 +602,7 @@ function castSkill(k) {
   const strike = (t, m, add, force) => {
     let d = Math.round(a*m*(cl.sp + eqf("sp"))) + (add ? rnd(add[0], add[1]) : 0);
     const c = force || Math.random() < critRate(); if (c) d = Math.round(d*1.8);
-    t.hp -= d; tot += d; hitList.push(foes.indexOf(t));
+    d = hurt(t, d); tot += d; hitList.push(foes.indexOf(t));
     const e = by.get(t) || { d:0, c:false }; e.d += d; e.c = e.c || c; by.set(t, e);
   };
   if (k.m) {
@@ -589,8 +624,22 @@ function castSkill(k) {
 function companionTurn() {
   P.party.forEach(id => {
     if (!living().length) return;
-    if (id === "wolf") { const t = pickTarget(), d = Math.round(tAtk()*.5) + rnd(0,3); t.hp -= d; hitList.push(tgt); blog(`🐺 白狼撲咬 ${t.n},造成 ${d} 傷害。`); }
-    else if (id === "fairy") { const h = 5 + Math.round(P.lv*1.5); P.hp = Math.min(P.mhp, P.hp+h); blog(`🧚 妖精為你療傷,回復 ${h} HP。`); }
+    const lv = compLv(id);
+    if (id === "wolf") {
+      for (let i=0;i<(lv >= 10 ? 2 : 1);i++) {
+        const L = living(); if (!L.length) break;
+        const first = i === 0 ? null : foes[tgt], others = L.filter(x => x !== first);
+        const t = i === 0 ? pickTarget() : (others.length ? others : L)[rnd(0, (others.length ? others : L).length-1)];
+        let d = Math.round(tAtk()*(.4 + .025*lv)) + rnd(0, 2 + Math.floor(lv/3)); if (lv >= 15) d = Math.round(d*1.25);
+        d = hurt(t, d); hitList.push(foes.indexOf(t)); blog(`🐺 白狼撲咬 ${t.n},造成 ${d} 傷害。`);
+        if (lv >= 5 && t.hp > 0) t.poison = { d:2 + Math.floor(lv/2), t:3 };
+      }
+    } else if (id === "fairy") {
+      const h = 4 + lv*2 + Math.round(P.lv*.5); P.hp = Math.min(P.mhp, P.hp+h); let m = `🧚 妖精為你療傷,回復 ${h} HP`;
+      if (lv >= 5 && P.poison && P.poison.t > 0) { P.poison = null; m += ",並解除了異常狀態"; }
+      if (lv >= 10) { const mp = 2 + Math.floor(lv/5); P.mp = Math.min(P.mmp, P.mp+mp); m += `,回復 ${mp} MP`; }
+      blog(m + "。");
+    }
   });
 }
 // 狂暴 / 頭目倒下時召喚物消散
@@ -610,10 +659,11 @@ function playerAct(kind) {
   busy = true; $("blog").innerHTML = ""; dealt = 0; hitList = [];
   pickTarget();
   const cl = CL(), a = tAtk(), sk = cl.sk.find(k => k.id === kind);
-  if (sk) { P.mp -= sk.mp; castSkill(sk); }
+  if (P.stunned) { P.stunned = 0; blog("😵 你被震懾住了,這回合動彈不得!"); }
+  else if (sk) { P.mp -= sk.mp; castSkill(sk); }
   else if (kind==="atk") {
     let d = Math.round(rnd(a-1, a+3) * cl.basic); const c = Math.random() < critRate(); if (c) d = Math.round(d*1.8);
-    foe.hp -= d; dealt = d; hitList.push(tgt); blog(`你攻擊 ${foe.n},造成 ${d} 傷害${c?" 暴擊!":"!"}`); beep(c?440:200,.08,"square");
+    d = hurt(foe, d); dealt = d; hitList.push(tgt); blog(`你攻擊 ${foe.n},造成 ${d} 傷害${c?" 暴擊!":"!"}`); beep(c?440:200,.08,"square");
   }
   else if (kind==="potion") { P.potion--; P.hp = Math.min(P.mhp, P.hp+25); blog("🧪 喝下藥水,回復 25 HP。"); beep(660,.1,"triangle"); }
   else if (kind==="ether") { P.ether--; P.mp = Math.min(P.mmp, P.mp+15); blog("🔹 喝下魔力水,回復 15 MP。"); beep(740,.1,"triangle"); }
@@ -638,19 +688,50 @@ function enemyPhase() {
     if (foeAct(list[idx]) === "fled") return;
     settle();
     if (!living().length) { refreshBattle(); return win(); }
-    if (P.hp <= 0) { P.hp = 0; refreshBattle(); return lose(); }
+    if (dead()) { refreshBattle(); return lose(); }
     refreshBattle();
     setTimeout(() => next(idx+1), 380);
   };
   next(0);
 }
 function endRound() {
-  if (P.poison && P.poison.t > 0) { P.hp -= P.poison.d; P.poison.t--; blog(`☠️ 毒發,損失 ${P.poison.d} HP。`); }
-  if (P.hp <= 0) { P.hp = 0; refreshBattle(); return lose(); }
+  if (P.poison && P.poison.t > 0) { P.hp -= P.poison.d; P.poison.t--; blog(`${P.poison.label || "☠️ 毒發"},損失 ${P.poison.d} HP。`); }
+  if (P.weak && P.weak.t > 0) P.weak.t--;
+  if (dead()) { refreshBattle(); return lose(); }
   busy = false; refreshBattle();
 }
+// 受傷結算:防禦姿態減半、詛咒降低玩家傷害、護盾先吸收
+function hurt(t, d) {
+  if (t.guard) d = Math.round(d*.5);
+  if (P.weak && P.weak.t > 0) d = Math.round(d*.75);
+  if (t.shield > 0) { const ab = Math.min(t.shield, d); t.shield -= ab; d -= ab; }
+  t.hp -= d; return d;
+}
+function dead() {   // 玩家倒下;15 級妖精可以讓你復活一次
+  if (P.hp > 0) return false;
+  if (P.party.includes("fairy") && compLv("fairy") >= 15 && !P.revived) {
+    P.revived = true; P.hp = Math.round(P.mhp*.3); blog("🧚 <b>妖精的祝福讓你重新站了起來!</b>"); return false;
+  }
+  P.hp = 0; return true;
+}
+const knightBlock = () => Math.min(.55, .3 + .01*compLv("knight"));
+const knightGuard = () => P.party.includes("knight") && compLv("knight") >= 5 ? Math.floor(compLv("knight")/3) : 0;
+function avoided(f) {
+  if (P.dodge > 0) { P.dodge--; blog(`🌫️ 你閃過了 ${f.n} 的攻擊!`); return true; }
+  if (Math.random() < dodgeRate()) { blog(`💨 你敏捷地閃過了 ${f.n} 的攻擊!`); return true; }
+  if (P.party.includes("knight") && Math.random() < knightBlock()) {
+    blog(`💂 騎士擋下了 ${f.n} 的攻擊!`);
+    if (compLv("knight") >= 10 && f.hp > 0) { const d = hurt(f, Math.round(tAtk()*.8)); blog(`💂 騎士反擊,造成 ${d} 傷害。`); hitList.push(foes.indexOf(f)); }
+    return true;
+  }
+  return false;
+}
+function dmgToPlayer(f, mult) {
+  const d = Math.max(1, Math.round(rnd(f.atk-2, f.atk+2) * mult) - tDef() - knightGuard());
+  P.hp -= d; fx($("wrap"), "flash"); beep(140,.12,"sawtooth"); return d;
+}
 function foeAct(f) {
-  foe = f; f.turn++;
+  foe = f; f.turn++; f.guard = 0;
   if (f.rare && f.turn >= 3) { endBattle(`💨 ${f.n} 溜走了……下次要在 3 回合內打倒牠!`); return "fled"; }
   if (f.poison && f.poison.t > 0) {
     f.hp -= f.poison.d; f.poison.t--; blog(`☠️ ${f.n} 受毒侵蝕,損失 ${f.poison.d} HP。`);
@@ -662,18 +743,36 @@ function foeAct(f) {
     for (let i=0;i<n;i++) { const m = mk(f.sum.e); m.summoned = true; m.xp = 0; m.g = 0; m.hp = m.mhp = Math.round(m.hp*.7); m.turn = 0; foes.push(m); }
     blog(`<b>${f.i} ${f.n} 召喚了 ${n} 隻${f.sum.e.n}!</b>`); beep(180,.2,"sawtooth"); return;
   }
-  if (f.tr === "heal" && Math.random() < .25) { const h = Math.round(f.mhp*.12); f.hp = Math.min(f.mhp, f.hp+h); blog(`✨ ${f.n} 自我修復了 ${h} HP。`); }
+  const sks = f.sk || [];
+  if (sks.includes("regen") && Math.random() < .25) { const h = Math.round(f.mhp*.12); f.hp = Math.min(f.mhp, f.hp+h); blog(`✨ ${f.n} 自我修復了 ${h} HP。`); }
+  // 自爆:瀕死時同歸於盡(不給獎勵)
+  if (sks.includes("boom") && f.hp <= f.mhp*.35 && Math.random() < .7) {
+    blog(`💣 <b>${f.n} 瀕死自爆了!</b>`);
+    if (!avoided(f)) blog(`受到 ${dmgToPlayer(f, 2.2)} 傷害!`);
+    f.hp = 0; f.boomed = true; return;
+  }
+  // 主動技能:依機率取代普通攻擊
+  const act = sks.filter(id => ACTIVE.includes(id)).sort(() => Math.random() - .5)
+    .find(id => (id !== "rally" || living().length > 1) && (id !== "barrier" || !(f.shield > 0)) && Math.random() < ESKILL[id].p);
+  if (act) {
+    const sn = `${ESKILL[act].i} ${f.n} 使出「${ESKILL[act].n}」`;
+    if (act === "guard") { f.guard = 1; blog(`${sn}!下一次受到的傷害減半。`); }
+    else if (act === "barrier") { f.shield = Math.round(f.mhp*.25); blog(`${sn}!張開了護盾。`); }
+    else if (act === "rally") { living().forEach(x => x.hp = Math.min(x.mhp, x.hp + Math.round(x.mhp*.12))); blog(`${sn}!同伴們恢復了體力。`); }
+    else if (act === "curse") { P.weak = { t:3 }; blog(`${sn}!3 回合內你造成的傷害 -25%。`); }
+    else if (act === "bash") { blog(`${sn}!`); if (!avoided(f)) { blog(`受到 ${dmgToPlayer(f, 1.2)} 傷害,並被震懾!(下回合無法行動)`); P.stunned = 1; } }
+    else if (act === "multi") { blog(`${sn}!`); for (let i=0;i<2;i++) if (!avoided(f)) blog(`第 ${i+1} 擊:受到 ${dmgToPlayer(f, .7)} 傷害。`); }
+    else if (act === "drain") { blog(`${sn}!`); if (!avoided(f)) { const d = dmgToPlayer(f, .9); f.hp = Math.min(f.mhp, f.hp + d); blog(`受到 ${d} 傷害,${f.n} 吸取了生命!`); } }
+    else if (act === "fire") { blog(`${sn}!`); if (!avoided(f)) { blog(`受到 ${dmgToPlayer(f, 1.3)} 傷害,並被灼傷!`); P.poison = { d:3 + G.area, t:3, label:"🔥 灼燒" }; } }
+    else if (act === "steal") { blog(`${sn}!`); if (!avoided(f)) { const d = dmgToPlayer(f, .6), g = Math.min(P.gold, rnd(8,20)*(G.area+1)); P.gold -= g; f.loot = (f.loot||0) + g; blog(`受到 ${d} 傷害,被偷走了 ${g} 金幣!(打倒牠可以奪回)`); } }
+    return;
+  }
   const heavy = f.boss && f.turn % 3 === 0;
-  const crit = f.tr === "crit" && Math.random() < .25;
-  if (P.dodge > 0) { P.dodge--; blog(`🌫️ 你閃過了 ${f.n} 的攻擊!`); }
-  else if (Math.random() < dodgeRate()) blog(`💨 你敏捷地閃過了 ${f.n} 的攻擊!`);
-  else if (P.party.includes("knight") && Math.random() < .3) blog(`💂 騎士擋下了 ${f.n} 的攻擊!`);
-  else {
-    const mult = heavy ? 1.6 : crit ? 1.6 : 1;
-    const d = Math.max(1, Math.round(rnd(f.atk-2, f.atk+2) * mult) - tDef());
-    P.hp -= d; blog(`${f.n} ${heavy ? "蓄力重擊" : crit ? "致命一擊" : "攻擊你"},受到 ${d} 傷害!`);
-    fx($("wrap"), "flash"); beep(140,.12,"sawtooth");
-    if (f.tr === "poison" && Math.random() < .35) { P.poison = { d:2 + G.area, t:3 }; blog("☠️ 你中毒了!"); }
+  const crit = sks.includes("crit") && Math.random() < .25;
+  if (!avoided(f)) {
+    const d = dmgToPlayer(f, heavy || crit ? 1.6 : 1);
+    blog(`${f.n} ${heavy ? "蓄力重擊" : crit ? "致命一擊" : "攻擊你"},受到 ${d} 傷害!`);
+    if (sks.includes("venom") && Math.random() < .35) { P.poison = { d:2 + G.area, t:3 }; blog("☠️ 你中毒了!"); }
   }
 }
 function levelUp() {
@@ -689,13 +788,15 @@ function levelUp() {
   return msg;
 }
 const MILESTONES = { 10:ai => ({ g:50*(ai+1), pts:1 }), 30:() => ({ pts:2, potion:3 }), 60:() => ({ pts:3, ether:3 }), 100:ai => ({ g:300*(ai+1), pts:4 }) };
+let battleXp = 0;
 function rewardOne(f) {
   foe = f;
   const a = A();
   const bonus = 1 + Math.min(.4, G.streak*.04);
-  const xpGain = Math.round(f.xp*bonus), goldGain = Math.round(f.g*bonus);
-  P.xp += xpGain; P.gold += goldGain; G.streak++;
-  let msg = `擊敗 ${f.n}:+${xpGain} 經驗 +${goldGain} 金幣`;
+  const xpGain = Math.round(f.xp*bonus); let goldGain = Math.round(f.g*bonus);
+  P.xp += xpGain; P.gold += goldGain; G.streak++; battleXp += xpGain;
+  if (f.loot) { P.gold += f.loot; goldGain += f.loot; }
+  let msg = `擊敗 ${f.n}:+${xpGain} 經驗 +${goldGain} 金幣${f.loot ? "(含奪回 "+f.loot+")" : ""}`;
   if (G.streak >= 3) msg += ` 🔥連勝x${G.streak}(+${Math.round((bonus-1)*100)}%)`;
   const ore = f.boss || f.rare ? 5 : f.elite ? 3 : rnd(1,2);
   P.ore += ore; msg += ` 🔩+${ore}`;
@@ -732,18 +833,19 @@ function rewardOne(f) {
 }
 function win() {
   jingle([392,523,659]);
-  const lines = foes.filter(f => !f.summoned).map(rewardOne);
-  endBattle(lines.join("<br>") + levelUp());
+  battleXp = 0;
+  const lines = foes.filter(f => !f.summoned && !f.boomed).map(rewardOne);
+  endBattle((lines.join("<br>") || "戰鬥結束了。") + compGain(battleXp) + levelUp());
 }
 function lose() {
-  $("battle").style.display = "none"; inBattle = false; P.poison = null; P.dodge = 0; foes = [];
+  $("battle").style.display = "none"; inBattle = false; P.poison = null; P.dodge = 0; P.stunned = 0; P.weak = null; P.revived = false; foes = [];
   const lost = Math.floor(P.gold/2); P.gold -= lost; G.streak = 0;
   P.hp = P.mhp; P.mp = P.mmp; [P.x, P.y] = A().from;
   hud(); draw(); save(); jingle([220,196,165]);
   say(`💀 你倒下了……被好心人送回了章節入口,損失 ${lost} 金幣,HP / MP 已回復。`);
 }
 function endBattle(msg) {
-  inBattle = false; P.poison = null; P.dodge = 0; foes = []; $("battle").style.display = "none"; hud(); draw(); save(); if (msg) say(msg);
+  inBattle = false; P.poison = null; P.dodge = 0; P.stunned = 0; P.weak = null; P.revived = false; foes = []; $("battle").style.display = "none"; hud(); draw(); save(); if (msg) say(msg);
 }
 
 // ---------- 面板 ----------
@@ -840,9 +942,9 @@ function openCodex() {
   const next = n => [10,30,60,100].find(m => m > n);
   const rows = AREAS.map((a,ai) => a.e.map(e => ({ ...e, ai }))).flat().concat([{ n:"黃金史萊姆", i:"🟡", ai:-1 }]).map(e => {
     const k = G.kills[e.n] || 0, nx = next(k);
-    return `<div class="row"><span>${e.i} ${e.n} <small>${e.ai>=0 ? AREAS[e.ai].name : "稀有"}</small></span><span>${k} 隻${nx ? " · 下個獎勵 "+nx : " · ✅ 全部達成"}</span></div>`;
+    return `<div class="row"><span>${e.i} ${e.n} <small>${e.ai>=0 ? AREAS[e.ai].name : "稀有"} ${(e.sk||[]).map(id => ESKILL[id].i).join("")}</small></span><span>${k} 隻${nx ? " · 下個獎勵 "+nx : " · ✅ 全部達成"}</span></div>`;
   }).join("");
-  openModal(`<h2>📖 怪物圖鑑</h2><div style="opacity:.75;margin-bottom:6px">累計擊敗 10 / 30 / 60 / 100 隻會獲得獎勵(能力點、金幣、道具)。連勝越多,經驗和金幣加成越高(最多 +40%);怪物也會掉落裝備和 🔩 素材。</div>
+  openModal(`<h2>📖 怪物圖鑑</h2><div style="opacity:.75;margin-bottom:6px">累計擊敗 10 / 30 / 60 / 100 隻會獲得獎勵(能力點、金幣、道具)。連勝越多,經驗和金幣加成越高(最多 +40%);怪物也會掉落裝備和 🔩 素材。</div><div style="margin-bottom:6px"><small>敵人技能:${Object.values(ESKILL).map(x => x.i+x.n+"("+x.t+")").join(" · ")}</small></div>
     ${rows}<button style="margin-top:10px" onclick="closeModal()">關閉</button>`);
 }
 const PT = { mhp:6, mmp:3, atk:1, def:1 };
@@ -867,7 +969,7 @@ function openStats(force) {
     ${row("提升 HP 上限","mhp")}${row("提升 MP 上限","mmp")}${row("提升 攻擊","atk")}${row("提升 防禦","def")}
     <h2 style="margin-top:12px">本章任務</h2><div class="row"><span>📜 ${qtxt}</span></div>
     <h2 style="margin-top:12px">夥伴(最多出戰 2 位)</h2>
-    ${comps.length ? comps.map(id => `<div class="row"><span>${COMPS[id].i} ${COMPS[id].n} <small>${COMPS[id].d}</small></span>
+    ${comps.length ? comps.map(id => `<div class="row"><span>${COMPS[id].i} ${COMPS[id].n} <b>Lv ${compLv(id)}</b> <small>XP ${G.comps[id].xp}/${compXpNeed(compLv(id))}<br>${compDesc(id)}</small></span>
       <button onclick="togglePartner('${id}')">${P.party.includes(id) ? "✔ 出戰中" : "待命"}</button></div>`).join("")
       : `<div class="row"><span style="opacity:.6">尚無夥伴。到各章找 🐺🧚💂 吧。</span></div>`}
     <h2 style="margin-top:12px">技能</h2>
