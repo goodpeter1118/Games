@@ -70,7 +70,7 @@
   <div id="modal"></div>
 </div>
 <div id="log"></div>
-<button id="menuBtn" style="margin-top:8px">📋 角色 / 技能 / 夥伴 / 設定 (C) · 🎒 裝備 (I)</button>
+<button id="menuBtn" style="margin-top:8px">📋 角色 / 技能 / 夥伴 / 設定 (C) · 🎒 裝備 (I) · 📖 圖鑑 (B)</button>
 <div id="pad">
   <span></span><button data-d="0,-1">▲</button><span></span>
   <button data-d="-1,0">◀</button><button data-d="0,1">▼</button><button data-d="1,0">▶</button>
@@ -238,15 +238,19 @@ const SLOTS = { weapon:"武器", armor:"防具", acc:"飾品" };
 const itemIcon = it => it.i || ({ weapon:{war:"🗡️",mage:"🪄",rogue:"🏹"}, armor:{war:"🛡️",mage:"👘",rogue:"🥋"} }[it.slot][it.cls]);
 const FXN = { atk:["攻擊",0], def:["防禦",0], hp:["HP",0], mp:["MP",0], crit:["暴擊",1], dodge:["閃避",1], sp:["技能威力",1], steal:["吸血",1] };
 const descItem = it => Object.keys(FXN).filter(k => it[k]).map(k => `${FXN[k][0]}+${FXN[k][1] ? Math.round(it[k]*100)+"%" : it[k]}`).join(" · ");
-const eqName = sl => { const it = ITEMS[P.eq[sl]]; return it ? it.n : (sl==="weapon" ? "徒手" : sl==="armor" ? "布衣" : "無"); };
-const eqf = k => Object.keys(SLOTS).reduce((sum, sl) => sum + ((ITEMS[P.eq[sl]] || {})[k] || 0), 0);
+const eqName = sl => { const it = ITEMS[P.eq[sl]]; return it ? it.n + (enhOf(it.id) ? " +"+enhOf(it.id) : "") : (sl==="weapon" ? "徒手" : sl==="armor" ? "布衣" : "無"); };
+const enhOf = id => (P.enh && P.enh[id]) || 0;
+const eqf = k => Object.keys(SLOTS).reduce((sum, sl) => {
+  const id = P.eq[sl], it = ITEMS[id] || {};
+  return sum + (it[k] || 0) + (sl==="weapon" && k==="atk" ? enhOf(id)*2 : 0) + (sl==="armor" && k==="def" ? enhOf(id) : 0);
+}, 0);
 const critRate = () => Math.min(.75, CL().crit + eqf("crit"));
 const dodgeRate = () => Math.min(.5, CL().dodge + eqf("dodge"));
 
 // ---------- 狀態 ----------
 const P = { x:2, y:17, cls:null, hp:30, mhp:30, mp:10, mmp:10, atk:6, lv:1, xp:0, next:20, gold:0, potion:2, ether:1,
-            def:0, pts:0, eq:{}, owned:[], party:[] };
-const G = { area:0, cleared:[], opened:{}, q:{}, comps:{}, shards:0, diff:1, mute:false, ended:false };
+            def:0, pts:0, eq:{}, owned:[], enh:{}, ore:0, party:[] };
+const G = { area:0, cleared:[], opened:{}, q:{}, comps:{}, shards:0, diff:1, mute:false, ended:false, kills:{}, streak:0 };
 function equip(id) {
   const it = ITEMS[id], old = ITEMS[P.eq[it.slot]];
   const dh = (it.hp||0) - ((old && old.hp)||0), dm = (it.mp||0) - ((old && old.mp)||0);
@@ -332,11 +336,11 @@ function hud() {
     `<div>${cl.i} Lv ${P.lv}${bar(P.xp,P.next,"var(--xp)")}</div>` +
     `<div>❤️ ${P.hp}/${P.mhp}${bar(P.hp,P.mhp,"var(--hp)")}</div>` +
     `<div>🔷 ${P.mp}/${P.mmp}${bar(P.mp,P.mmp,"var(--mp)")}</div>` +
-    `<div>💰 ${P.gold} 🧪${P.potion} 🔹${P.ether}<br>⚔️${tAtk()} 🛡️${tDef()}${P.pts?` <b style="color:var(--xp)">+${P.pts}</b>`:""}</div>`;
+    `<div>💰 ${P.gold} 🧪${P.potion} 🔹${P.ether}<br>⚔️${tAtk()} 🛡️${tDef()} 🔩${P.ore}${P.pts?` <b style="color:var(--xp)">+${P.pts}</b>`:""}</div>`;
   const a = A(), c = G.cleared[G.area];
   const goal = a.last ? (c ? "已通關!" : "目標:擊敗 "+a.boss.n) : (c ? "前往傳送門 🌀" : "目標:擊敗 "+a.boss.n);
   const party = P.party.map(id => COMPS[id].i).join("");
-  $("area").innerHTML = `📍 ${a.hidden ? "隱藏" : "第 "+(G.area+1)+" 章"} · ${a.name}　<small>${goal}${G.shards ? " · ⭐"+G.shards+"/4" : ""}${party ? " · 夥伴 "+party : ""} · ${DIFFS[G.diff].n}</small>`;
+  $("area").innerHTML = `📍 ${a.hidden ? "隱藏" : "第 "+(G.area+1)+" 章"} · ${a.name}　<small>${goal}${G.shards ? " · ⭐"+G.shards+"/4" : ""}${party ? " · 夥伴 "+party : ""}${G.streak>=2 ? " · 🔥連勝x"+G.streak : ""} · ${DIFFS[G.diff].n}</small>`;
 }
 function draw() {
   const a = A(), th = THEMES[a.th], g = cur();
@@ -389,8 +393,13 @@ function move(dx,dy) {
   else if (t==="<") goArea(G.area-1, true);
   else if (t==="B") { say(`${a.boss.i} ${a.boss.n} 擋住了去路!`); startBattle(mk(a.boss)); }
   else if (t==="." && Math.random() < a.rate) {
-    const e = a.e[rnd(0, a.e.length-1)];
-    startBattle(mk(e, Math.random() < .06));
+    if (Math.random() < .04) {
+      const ai = G.area;
+      startBattle(mk({ n:"黃金史萊姆", i:"🟡", hp:30+ai*25, atk:4+ai*3, xp:40+ai*35, g:60+ai*50, rare:true }));
+    } else {
+      const e = a.e[rnd(0, a.e.length-1)];
+      startBattle(mk(e, Math.random() < .06));
+    }
   } else say("");
 }
 function goArea(i, back) {
@@ -533,7 +542,7 @@ function playerAct(kind) {
   else if (kind==="ether") { P.ether--; P.mp = Math.min(P.mmp, P.mp+15); blog("🔹 喝下魔力水,回復 15 MP。"); beep(740,.1,"triangle"); }
   else if (kind==="run") {
     if (foe.boss) blog("守護者不讓你逃跑!");
-    else if (Math.random() < 0.6) { endBattle("你成功逃跑了。"); return; }
+    else if (Math.random() < 0.6) { G.streak = 0; endBattle("你成功逃跑了。"); return; }
     else blog("逃跑失敗!");
   }
   const steal = eqf("steal");
@@ -549,6 +558,7 @@ function playerAct(kind) {
 }
 function foeTurn() {
   foe.turn++;
+  if (foe.rare && foe.turn >= 3) { endBattle(`💨 ${foe.n} 溜走了……下次要在 3 回合內打倒牠!`); return; }
   if (foe.poison && foe.poison.t > 0) {
     foe.hp -= foe.poison.d; foe.poison.t--; blog(`☠️ ${foe.n} 受毒侵蝕,損失 ${foe.poison.d} HP。`);
     if (foe.hp <= 0) { refreshBattle(); return win(); }
@@ -583,10 +593,28 @@ function levelUp() {
   }
   return msg;
 }
+const MILESTONES = { 10:ai => ({ g:50*(ai+1), pts:1 }), 30:() => ({ pts:2, potion:3 }), 60:() => ({ pts:3, ether:3 }), 100:ai => ({ g:300*(ai+1), pts:4 }) };
 function win() {
   const a = A();
-  P.xp += foe.xp; P.gold += foe.g;
-  let msg = `擊敗 ${foe.n}!獲得 ${foe.xp} 經驗、${foe.g} 金幣。`;
+  const bonus = 1 + Math.min(.4, G.streak*.04);
+  const xpGain = Math.round(foe.xp*bonus), goldGain = Math.round(foe.g*bonus);
+  P.xp += xpGain; P.gold += goldGain; G.streak++;
+  let msg = `擊敗 ${foe.n}!獲得 ${xpGain} 經驗、${goldGain} 金幣。`;
+  if (G.streak >= 3) msg += ` 🔥 連勝 x${G.streak}(獎勵 +${Math.round((bonus-1)*100)}%)`;
+  const ore = foe.boss || foe.rare ? 5 : foe.elite ? 3 : rnd(1,2);
+  P.ore += ore; msg += `<br>🔩 素材 +${ore}`;
+  if (!foe.boss) {
+    const chance = foe.rare ? .5 : foe.elite ? .2 : .05;
+    if (Math.random() < chance) {
+      const lo = foe.elite || foe.rare ? G.area : Math.max(0, G.area-1);
+      const pool = ITEMLIST.filter(it => !it.drop && it.t >= lo && it.t <= G.area+1 && (!it.cls || it.cls === P.cls) && !P.owned.includes(it.id));
+      if (pool.length) { const it = pool[rnd(0, pool.length-1)]; P.owned.push(it.id);
+        msg += `<br>🎁 掉落裝備:<b>${itemIcon(it)} ${it.n}</b>(${descItem(it)}),可在 🎒 裝備面板穿上!`; }
+    }
+  }
+  const kn = foe.base, kc = G.kills[kn] = (G.kills[kn] || 0) + 1;
+  const ms = MILESTONES[kc];
+  if (ms) { msg += `<br>📖 圖鑑里程碑:累計擊敗 ${kn} ${kc} 隻!獎勵 ${rewardText(ms(G.area))}`; jingle([659,784,988]); }
   jingle([392,523,659]);
   if (foe.boss) {
     G.cleared[G.area] = true; const [bx,by] = a.gate.b; cur()[by][bx] = ".";
@@ -612,7 +640,7 @@ function win() {
 }
 function lose() {
   $("battle").style.display = "none"; inBattle = false; P.poison = null; P.dodge = 0;
-  const lost = Math.floor(P.gold/2); P.gold -= lost;
+  const lost = Math.floor(P.gold/2); P.gold -= lost; G.streak = 0;
   P.hp = P.mhp; P.mp = P.mmp; [P.x, P.y] = A().from;
   hud(); draw(); save(); jingle([220,196,165]);
   say(`💀 你倒下了……被好心人送回了章節入口,損失 ${lost} 金幣,HP / MP 已回復。`);
@@ -648,7 +676,8 @@ function itemRow(it, shop) {
   const btn = on ? `<button disabled>裝備中</button>`
     : owned ? `<button onclick="equipItem('${it.id}',${shop})">裝備</button>`
     : `<button onclick="buyItem('${it.id}')" ${P.gold<it.p?"disabled":""}>💰${it.p}</button>`;
-  return `<div class="row"><span>${itemIcon(it)} ${it.n} <small>${descItem(it)}</small></span>${btn}</div>`;
+  const lv = enhOf(it.id);
+  return `<div class="row"><span>${itemIcon(it)} ${it.n}${lv ? " +"+lv : ""} <small>${descItem(it)}${lv ? " · 強化 "+(it.slot==="weapon" ? "攻擊+"+lv*2 : "防禦+"+lv) : ""}</small></span>${btn}</div>`;
 }
 function openShop() {
   const stock = ITEMLIST.filter(it => !it.drop && it.t <= G.area && (!it.cls || it.cls === P.cls));
@@ -672,14 +701,33 @@ function buyItem(id) {
   hud(); save(); beep(520,.08,"triangle"); openShop();
 }
 function equipItem(id, shop) { equip(id); hud(); save(); beep(440,.06,"triangle"); shop ? openShop() : openEquip(); }
+const enhCost = id => { const lv = enhOf(id); return { g:Math.round(40*(lv+1)*(1+ITEMS[id].t*.5)), ore:lv+2 }; };
+function enhance(id) {
+  const lv = enhOf(id); if (lv >= 10) return;
+  const c = enhCost(id); if (P.gold < c.g || P.ore < c.ore) return;
+  P.gold -= c.g; P.ore -= c.ore; P.enh[id] = lv + 1; hud(); save(); jingle([523,659]); openEquip();
+}
 function openEquip() {
+  const enhRow = sl => { const id = P.eq[sl]; if (!id || sl === "acc") return "";
+    const lv = enhOf(id), c = enhCost(id);
+    return `<div class="row"><span>🔨 強化 ${ITEMS[id].n} <small>+${lv} → ${lv>=10?"已滿級":"+"+(lv+1)}</small></span>`
+      + (lv >= 10 ? `<button disabled>已滿級</button>` : `<button onclick="enhance('${id}')" ${P.gold<c.g||P.ore<c.ore?"disabled":""}>💰${c.g} 🔩${c.ore}</button>`) + `</div>`; };
   const mine = sl => P.owned.map(id => ITEMS[id]).filter(it => it.slot === sl && (!it.cls || it.cls === P.cls));
   const sec = sl => `<h2 style="margin-top:10px">${SLOTS[sl]}:${P.eq[sl] ? itemIcon(ITEMS[P.eq[sl]]) + " " + eqName(sl) : eqName(sl)}</h2>`
-    + (mine(sl).map(it => itemRow(it, false)).join("") || `<div class="row"><span style="opacity:.6">還沒有${SLOTS[sl]}</span></div>`);
-  openModal(`<h2>🎒 裝備 · ${CL().i} ${CL().n}</h2>
+    + enhRow(sl) + (mine(sl).map(it => itemRow(it, false)).join("") || `<div class="row"><span style="opacity:.6">還沒有${SLOTS[sl]}</span></div>`);
+  openModal(`<h2>🎒 裝備 · ${CL().i} ${CL().n} · 🔩素材 ${P.ore} · 💰 ${P.gold}</h2>
     <div class="row"><span>⚔️ ${tAtk()} · 🛡️ ${tDef()}</span><span>暴擊 ${Math.round(critRate()*100)}% · 閃避 ${Math.round(dodgeRate()*100)}%${eqf("sp")?" · 技能威力 +"+Math.round(eqf("sp")*100)+"%":""}${eqf("steal")?" · 吸血 "+Math.round(eqf("steal")*100)+"%":""}</span></div>
     ${sec("weapon")}${sec("armor")}${sec("acc")}
     <button style="margin-top:10px" onclick="closeModal()">關閉</button>`);
+}
+function openCodex() {
+  const next = n => [10,30,60,100].find(m => m > n);
+  const rows = AREAS.map((a,ai) => a.e.map(e => ({ ...e, ai }))).flat().concat([{ n:"黃金史萊姆", i:"🟡", ai:-1 }]).map(e => {
+    const k = G.kills[e.n] || 0, nx = next(k);
+    return `<div class="row"><span>${e.i} ${e.n} <small>${e.ai>=0 ? AREAS[e.ai].name : "稀有"}</small></span><span>${k} 隻${nx ? " · 下個獎勵 "+nx : " · ✅ 全部達成"}</span></div>`;
+  }).join("");
+  openModal(`<h2>📖 怪物圖鑑</h2><div style="opacity:.75;margin-bottom:6px">累計擊敗 10 / 30 / 60 / 100 隻會獲得獎勵(能力點、金幣、道具)。連勝越多,經驗和金幣加成越高(最多 +40%);怪物也會掉落裝備和 🔩 素材。</div>
+    ${rows}<button style="margin-top:10px" onclick="closeModal()">關閉</button>`);
 }
 function openStats() {
   if (inBattle) return;
@@ -704,7 +752,7 @@ function openStats() {
     <div style="opacity:.8">難度(隨時可調整)</div>
     <div class="seg">${DIFFS.map((x,i) => `<button class="${i===G.diff?"on":""}" onclick="setDiff(${i})">${x.n}</button>`).join("")}</div>
     <div class="seg"><button onclick="toggleMute()">${G.mute ? "🔇 音效:關" : "🔊 音效:開"}</button></div>
-    <div style="display:flex;gap:8px;margin-top:10px"><button style="flex:1" onclick="closeModal()">關閉</button><button onclick="openEquip()">🎒 裝備 (I)</button><button onclick="newGame()">🔄 新遊戲</button></div>`);
+    <div style="display:flex;gap:8px;margin-top:10px"><button style="flex:1" onclick="closeModal()">關閉</button><button onclick="openEquip()">🎒 裝備 (I)</button><button onclick="openCodex()">📖 圖鑑 (B)</button><button onclick="newGame()">🔄 新遊戲</button></div>`);
 }
 function spend(key) {
   if (P.pts<1) return; P.pts--;
@@ -742,6 +790,7 @@ addEventListener("keydown", e => {
   if (e.key==="p"||e.key==="P") return usePotion();
   if (e.key==="e"||e.key==="E") return useEther();
   if ((e.key==="i"||e.key==="I") && ($("modal").style.display==="flex" || !inBattle)) return $("modal").style.display==="flex" ? closeModal() : openEquip();
+  if ((e.key==="b"||e.key==="B") && ($("modal").style.display==="flex" || !inBattle)) return $("modal").style.display==="flex" ? closeModal() : openCodex();
   if (e.key==="c"||e.key==="C") return $("modal").style.display==="flex" ? closeModal() : openStats();
   const d = KEYS[e.key] || KEYS[e.key.toLowerCase?.()];
   if (d) { e.preventDefault(); move(...d); }
