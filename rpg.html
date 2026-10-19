@@ -24,8 +24,12 @@
   #battle { position:absolute; inset:0; border-radius:10px; display:none; flex-direction:column;
             justify-content:space-between; padding:16px; overflow:auto; }
   #battle .foe { text-align:center; margin-top:6px; }
-  #foeIcon { display:inline-block; font-size:clamp(64px,16vw,110px); line-height:1.1; }
-  #foeName { display:block; font-size:16px; }
+  #foes { display:flex; justify-content:center; gap:8px; flex-wrap:wrap; margin-top:6px; }
+  .fo { text-align:center; cursor:pointer; padding:6px 8px; border-radius:10px; border:2px solid transparent; min-width:96px; }
+  .fo.sel { border-color:var(--xp); background:#ffffff12; }
+  .fo.dead { opacity:.25; filter:grayscale(1); cursor:default; }
+  .fo .ic { display:inline-block; font-size:var(--fs); line-height:1.1; }
+  .fo small { display:block; font-size:13px; }
   #blog { min-height:84px; font-size:15px; line-height:1.55; margin-bottom:8px; }
   #cmds { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
   #modal { position:absolute; inset:0; background:#0b0d14f7; border-radius:10px; display:none; flex-direction:column;
@@ -60,8 +64,7 @@
 <div id="wrap">
   <canvas id="c" width="720" height="720"></canvas>
   <div id="battle">
-    <div class="foe"><span id="foeIcon"></span><small id="foeName"></small>
-      <div class="bar" style="width:60%;margin:6px auto 0;height:10px"><i id="foeHp" style="background:var(--hp)"></i></div></div>
+    <div id="foes"></div>
     <div>
       <div id="blog"></div>
       <div id="cmds"></div>
@@ -102,23 +105,23 @@ const CLASSES = {
     sk:[ {id:"slash", n:"🗡️ 強斬", lv:1, mp:3, m:1.8, add:[0,3], d:"1.8 倍 ATK"},
          {id:"roar",  n:"📣 戰吼", lv:2, mp:5, heal:{f:.3}, d:"回復 30% HP"},
          {id:"bash",  n:"🛡️ 盾擊", lv:3, mp:4, m:1.3, stun:.6, d:"1.3 倍並可能暈眩"},
-         {id:"whirl", n:"🌪️ 旋風斬", lv:6, mp:9, m:3.2, add:[0,4], d:"3.2 倍 ATK"},
+         {id:"whirl", n:"🌪️ 旋風斬", lv:6, mp:9, m:2.2, add:[0,3], aoe:true, d:"全體:各 2.2 倍 ATK"},
          {id:"drain", n:"🩸 吸血", lv:8, mp:8, m:1.6, add:[0,3], drain:true, d:"傷害並回復一半"},
          {id:"titan", n:"💥 破天一擊", lv:10, mp:15, m:4.8, add:[0,8], d:"4.8 倍 ATK"} ] },
   mage:{ n:"法師", i:"🧙", d:"MP 多、技能威力高,但普通攻擊偏弱", hp:24, mp:18, atk:5, g:{hp:4,mp:4,atk:1}, sp:1.15, basic:.8, crit:.08, dodge:0,
     sk:[ {id:"fire",  n:"🔥 火球", lv:1, mp:4, m:1, add:[4,9], d:"ATK + 4~9"},
          {id:"heal",  n:"💚 治療", lv:1, mp:5, heal:{flat:true}, d:"回復 HP"},
          {id:"frost", n:"❄️ 冰錐", lv:3, mp:5, m:1.6, stun:.4, d:"1.6 倍並可能凍結"},
-         {id:"thunder",n:"⚡ 雷擊", lv:5, mp:8, m:2.8, add:[0,5], d:"2.8 倍 ATK"},
+         {id:"thunder",n:"⚡ 雷擊", lv:5, mp:8, m:2, add:[0,4], aoe:true, d:"全體:各 2 倍 ATK"},
          {id:"drain", n:"🩸 吸血", lv:7, mp:7, m:1.5, add:[0,3], drain:true, d:"傷害並回復一半"},
-         {id:"meteor",n:"☄️ 流星", lv:9, mp:14, m:4, add:[0,8], d:"4 倍 ATK"} ] },
+         {id:"meteor",n:"☄️ 流星", lv:9, mp:14, m:3.2, add:[0,6], aoe:true, d:"全體:各 3.2 倍 ATK"} ] },
   rogue:{ n:"遊俠", i:"🧝", d:"高暴擊與閃避,擅長連擊與毒", hp:30, mp:10, atk:6, g:{hp:5,mp:2,atk:1}, sp:1, basic:1, crit:.2, dodge:.12,
-    sk:[ {id:"volley",n:"🏹 連射", lv:1, mp:3, m:.9, hits:2, add:[0,2], d:"射出 2 箭"},
+    sk:[ {id:"volley",n:"🏹 連射", lv:1, mp:3, m:.9, hits:2, add:[0,2], spread:true, d:"隨機射出 2 箭"},
          {id:"aid",   n:"🩹 急救", lv:1, mp:5, heal:{flat:true}, d:"回復 HP"},
          {id:"poison",n:"☠️ 毒箭", lv:3, mp:4, m:1.1, poison:{d:3,t:4}, d:"傷害並使敵人中毒"},
          {id:"assas", n:"🗡️ 暗殺", lv:5, mp:7, m:3, crit:true, d:"必定暴擊"},
          {id:"shadow",n:"🌫️ 影分身", lv:7, mp:6, dodge:2, d:"閃避接下來 2 次攻擊"},
-         {id:"rain",  n:"🌧️ 百裂箭", lv:9, mp:13, m:.8, hits:5, add:[0,2], d:"射出 5 箭"} ] },
+         {id:"rain",  n:"🌧️ 百裂箭", lv:9, mp:13, m:.8, hits:5, add:[0,2], spread:true, d:"隨機射出 5 箭"} ] },
 };
 const COMPS = {
   wolf:  { n:"白狼", i:"🐺", d:"每回合咬擊敵人", need:() => qDone(0,1), needTxt:"先完成村長的第一個託付,我才信得過你。" },
@@ -127,8 +130,9 @@ const COMPS = {
 };
 const DIFFS = [
   { n:"簡單", hp:.75, atk:.8,  r:1,   d:"敵人較弱" },
-  { n:"普通", hp:1,   atk:1,   r:1,   d:"標準體驗" },
-  { n:"困難", hp:1.4, atk:1.3, r:1.3, d:"敵人更強,獎勵 +30%" },
+  { n:"普通", hp:1.1, atk:1.05, r:1,   d:"標準體驗" },
+  { n:"困難", hp:1.5, atk:1.3, r:1.3, d:"敵人更強,獎勵 +30%" },
+  { n:"地獄", hp:2,   atk:1.6, r:1.8, d:"極限挑戰,獎勵 +80%" },
 ];
 
 // ---------- 章節資料 ----------
@@ -150,14 +154,14 @@ const Q = (k,n,r,say) => ({ k, n, txt:`擊敗 ${n} 隻${k}`, r, say });
 const AREAS = [
   { name:"翠綠草原", th:"grass", rate:.13, from:[2,17],
     e:[E("史萊姆","🟢",12,3,6,4), E("哥布林","👺",20,5,10,8), E("野狼","🐺",22,6,12,9)],
-    boss:{ drop:"d_slime", n:"史萊姆王", i:"👑", hp:70, atk:8, xp:50, g:60, boss:true },
+    boss:{ sum:{ every:3, n:2, e:E("史萊姆","🟢",12,3,0,0) }, drop:"d_slime", n:"史萊姆王", i:"👑", hp:70, atk:8, xp:50, g:60, boss:true },
     gate:{ b:[18,2], p:[18,1] }, H:[4,15], S:[6,15], $:[[15,16],[10,5]], comp:{ id:"wolf", at:[8,9] },
     npc:{ at:[3,12], n:"村長", i:"🧓", wait:"還沒完成呢,加油!", after:"往東北方走,打倒史萊姆王就能前往森林。",
       quests:[ Q("史萊姆",3,{g:40,pts:1},"年輕人,魔王的陰影正籠罩大地……先幫我清掉草原上的史萊姆吧。"),
                Q("哥布林",5,{g:80,potion:2,ether:1},"哥布林偷了我們的糧食,再麻煩你教訓牠們一下。") ] } },
   { name:"幽暗森林", th:"forest", rate:.14, from:[2,18], pb:[1,18],
     e:[E("蝙蝠","🦇",22,7,14,10), E("毒蜘蛛","🕷️",30,8,18,13,"poison"), E("樹精","🌲",38,9,22,16)],
-    boss:{ drop:"d_web", n:"巨型蜘蛛", i:"🕸️", hp:130, atk:12, xp:100, g:100, boss:true, tr:"poison" },
+    boss:{ sum:{ every:3, n:2, e:E("小蜘蛛","🕷️",16,6,0,0,"poison") }, drop:"d_web", n:"巨型蜘蛛", i:"🕸️", hp:130, atk:12, xp:100, g:100, boss:true, tr:"poison" },
     gate:{ b:[2,2], p:[1,2] }, H:[17,10], S:[10,10], $:[[8,3],[16,4]], star:[18,18], comp:{ id:"fairy", at:[4,10] },
     npc:{ at:[15,16], n:"獵人", i:"🏹", wait:"還沒完成呢,加油!", after:"森林西北角有隻巨型蜘蛛守著傳送門,小心牠的毒。",
       quests:[ Q("毒蜘蛛",4,{g:70,potion:2},"最近毒蜘蛛猖獗,我的陷阱全被破壞了,能幫我處理嗎?"),
@@ -171,35 +175,35 @@ const AREAS = [
                Q("木乃伊",4,{g:200,pts:2,ether:2},"古墓裡的木乃伊醒了,貨物全被牠們搶走了。") ] } },
   { name:"冰封雪山", th:"snow", rate:.14, from:[2,1], pb:[1,1],
     e:[E("冰狼","🐺",64,15,38,28,"crit"), E("雪怪","🦍",80,16,46,34), E("冰靈","🧊",58,18,42,32,"heal")],
-    boss:{ drop:"d_ice", n:"冰龍", i:"🐲", hp:340, atk:20, xp:260, g:260, boss:true },
+    boss:{ sum:{ every:4, n:1, e:E("冰靈","🧊",58,18,0,0,"heal") }, drop:"d_ice", n:"冰龍", i:"🐲", hp:340, atk:20, xp:260, g:260, boss:true },
     gate:{ b:[10,18], p:[10,19] }, H:[3,10], S:[5,10], $:[[17,2],[8,15]], star:[18,10],
     npc:{ at:[16,6], n:"登山客", i:"🧗", wait:"還沒完成呢,加油!", after:"南邊的冰龍守著通往洞窟的傳送門,牠的吐息很痛。",
       quests:[ Q("雪怪",3,{g:200,pts:2,potion:3},"雪怪堵住了登山路線,你看起來身手不錯,能幫我嗎?"),
                Q("冰靈",5,{g:300,pts:3},"山頂的冰靈會不斷自我修復,得靠你連續擊破了。") ] } },
   { name:"地下洞窟", th:"cave", rate:.15, from:[17,1], pb:[18,1],
     e:[E("骷髏兵","💀",72,18,52,38), E("石魔像","🗿",110,19,62,46), E("幽靈","👻",84,22,64,50,"heal")],
-    boss:{ drop:"d_belt", n:"洞窟巨人", i:"🧌", hp:480, atk:24, xp:400, g:400, boss:true },
+    boss:{ sum:{ every:4, n:1, e:E("石魔像","🗿",110,19,0,0) }, drop:"d_belt", n:"洞窟巨人", i:"🧌", hp:480, atk:24, xp:400, g:400, boss:true },
     gate:{ b:[1,18], p:[0,18] }, H:[12,5], S:[9,10], $:[[2,3],[16,16]], star:[10,1],
     npc:{ at:[4,6], n:"礦工", i:"⛏️", wait:"還沒完成呢,加油!", after:"再往西南就是巨人的老窩,通過後就是魔王城。",
       quests:[ Q("石魔像",4,{g:300,pts:3},"石魔像把礦道全堵死了!只要能清掉牠們,我就不虧待你。"),
                Q("幽靈",5,{g:400,pts:3},"礦道深處鬧鬼,工人都不敢進去……") ] } },
   { name:"魔王城", th:"castle", rate:.16, from:[10,18], pb:[10,19],
     e:[E("魔騎士","🛡️",130,25,90,60), E("惡魔","😈",110,28,100,70,"crit"), E("龍騎兵","🐉",150,27,110,80,"poison")],
-    boss:{ drop:"d_horn", n:"魔王", i:"👹", hp:650, atk:28, xp:200, g:300, boss:true, rage:true },
+    boss:{ sum:{ every:3, n:2, e:E("惡魔","😈",110,28,0,0,"crit") }, drop:"d_horn", n:"魔王", i:"👹", hp:650, atk:28, xp:200, g:300, boss:true, rage:true },
     gate:{ b:[10,2], p:[10,1] }, H:[3,10], S:[16,10], $:[[3,3],[17,3]], comp:{ id:"knight", at:[14,14] },
     npc:{ at:[6,10], n:"流浪騎士", i:"🧔", wait:"還沒完成呢,加油!", after:"魔王就在王座上。聽說,魔王身後的傳送門需要「星之碎片」才能開啟……",
       quests:[ Q("魔騎士",5,{g:400,pts:3,potion:3},"我曾與魔王交手……他在身負重傷時會狂暴。先清掉他的魔騎士近衛吧。"),
                Q("惡魔",5,{g:600,pts:4,potion:5},"惡魔們還在城裡作亂,這是最後的請求。") ] } },
   { name:"失落神殿", th:"temple", rate:.16, from:[2,18], pb:[1,18], req:{ shards:4 }, hidden:true,
     e:[E("石像守衛","🗽",190,32,130,100), E("神殿祭司","🧙‍♂️",150,35,140,110,"heal"), E("聖甲蟲","🪲",170,34,135,105,"poison")],
-    boss:{ drop:"d_heart", n:"遠古巨龍", i:"🐉", hp:900, atk:36, xp:600, g:600, boss:true, rage:true },
+    boss:{ sum:{ every:3, n:2, e:E("聖甲蟲","🪲",170,34,0,0,"poison") }, drop:"d_heart", n:"遠古巨龍", i:"🐉", hp:900, atk:36, xp:600, g:600, boss:true, rage:true },
     gate:{ b:[18,2], p:[18,1] }, H:[4,10], S:[6,10], $:[[16,16],[12,6]],
     npc:{ at:[10,14], n:"神殿守護者", i:"🧙‍♀️", wait:"還沒完成呢,加油!", after:"勇者啊,深淵之門在巨龍身後。",
       quests:[ Q("石像守衛",4,{g:500,pts:3},"外人竟能踏入這裡……證明你的實力,擊碎那些失控的石像。"),
                Q("神殿祭司",4,{g:800,pts:4},"祭司們被黑暗腐化了,請讓他們安息。") ] } },
   { name:"星辰深淵", th:"void", rate:.17, from:[17,18], pb:[18,18], last:true, hidden:true,
     e:[E("虛空行者","👁️",220,38,160,130), E("星靈","🌠",200,41,170,140,"crit"), E("深淵魔","🦑",260,40,180,150,"poison")],
-    boss:{ drop:"d_void", n:"虛空之主", i:"🌑", hp:1400, atk:44, xp:0, g:1500, boss:true, rage:true },
+    boss:{ sum:{ every:3, n:2, e:E("虛空行者","👁️",220,38,0,0) }, drop:"d_void", n:"虛空之主", i:"🌑", hp:1400, atk:44, xp:0, g:1500, boss:true, rage:true },
     gate:{ b:[10,2], p:null }, H:[9,10], S:[11,10], $:[[3,15],[16,5]],
     npc:{ at:[4,6], n:"星之旅人", i:"🌟", wait:"還沒完成呢,加油!", after:"盡頭的虛空之主,就是一切的終點。",
       quests:[ Q("虛空行者",4,{g:800,pts:4},"星辰之間的裂縫不斷吐出虛空行者……"),
@@ -244,13 +248,50 @@ const eqf = k => Object.keys(SLOTS).reduce((sum, sl) => {
   const id = P.eq[sl], it = ITEMS[id] || {};
   return sum + (it[k] || 0) + (sl==="weapon" && k==="atk" ? enhOf(id)*2 : 0) + (sl==="armor" && k==="def" ? enhOf(id) : 0);
 }, 0);
+const RARITY = [ {n:"普通",c:"#e8ecff",m:1}, {n:"優良",c:"#6fdc8c",m:1.5}, {n:"稀有",c:"#5aa9ff",m:2.5}, {n:"史詩",c:"#c77dff",m:4} ];
+const PRICE = [30,90,160,220,350,500,650,950];
+const ACC_NAMES = [["符文戒指","💍"],["魔晶項鍊","📿"],["古老護符","🧿"],["旅人徽章","🎖️"],["星光耳墜","✨"]];
+const pct = (lo, t) => +((lo + .01*rnd(0,2)) * (1 + t*.1)).toFixed(3);
+const AFFIX = { atk:t => Math.round((1+rnd(0,2))*(1+t*.25)), def:t => Math.round((1+rnd(0,2))*(1+t*.25)),
+  hp:t => Math.round(rnd(6,12)*(1+t*.25)), mp:t => Math.round(rnd(3,6)*(1+t*.25)),
+  crit:t => pct(.02,t), dodge:t => pct(.02,t), sp:t => pct(.03,t), steal:t => pct(.02,t) };
+// 隨機裝備:稀有度決定詞綴數量(0~3),品階跟著章節走
+function rollItem(tier, elite, rare) {
+  const t = Math.max(0, Math.min(7, tier));
+  const w = rare ? [0,30,50,20] : elite ? [20,45,28,7] : [60,30,9,1];
+  let r = rnd(1,100), ri = 0, acc = 0;
+  for (let i=0;i<4;i++) { acc += w[i]; if (r <= acc) { ri = i; break; } }
+  const q = Math.random(), slot = q < .35 ? "weapon" : q < .7 ? "armor" : "acc";
+  if (slot === "acc" && ri === 0) ri = 1;
+  const id = "g" + (++G.genSeq), it = { id, gen:true, slot, rar:ri, t };
+  if (slot === "acc") { const [n,i] = ACC_NAMES[rnd(0, ACC_NAMES.length-1)]; it.n = `[${RARITY[ri].n}] ${n}`; it.i = i; }
+  else {
+    const bases = ITEMLIST.filter(x => x.cls === P.cls && x.slot === slot && !x.drop && x.t <= t);
+    const base = bases[bases.length-1]; it.cls = P.cls; it.n = `[${RARITY[ri].n}] ${base.n}`;
+    if (slot === "weapon") it.atk = base.atk; else it.def = base.def;
+  }
+  const keys = Object.keys(AFFIX).sort(() => Math.random() - .5);
+  for (let i=0;i<ri;i++) it[keys[i]] = (it[keys[i]] || 0) + AFFIX[keys[i]](t);
+  it.p = Math.round(PRICE[t] * RARITY[ri].m * .5);
+  G.gen[id] = it; ITEMS[id] = it;
+  return it;
+}
+const bagCount = () => P.owned.filter(id => !Object.values(P.eq).includes(id)).length;
+const sellValue = it => it.p ? Math.round(it.p*.5) : 5;
+const salvageValue = it => 1 + (it.rar||0)*2 + (it.t||0);
+function dropItem(it) {   // 背包滿了(40 件)就自動賣掉
+  if (bagCount() >= 40) { const g = sellValue(it); P.gold += g; delete G.gen[it.id]; delete ITEMS[it.id]; return ` 💰背包已滿,自動賣出 ${it.n}(+${g})`; }
+  P.owned.push(it.id);
+  return `<br>🎁 掉落 <b style="color:${RARITY[it.rar].c}">${itemIcon(it)} ${it.n}</b>(${descItem(it)})!`;
+}
+function removeItem(id) { P.owned = P.owned.filter(x => x !== id); if (G.gen[id]) { delete G.gen[id]; delete ITEMS[id]; } }
 const critRate = () => Math.min(.75, CL().crit + eqf("crit"));
 const dodgeRate = () => Math.min(.5, CL().dodge + eqf("dodge"));
 
 // ---------- 狀態 ----------
 const P = { x:2, y:17, cls:null, hp:30, mhp:30, mp:10, mmp:10, atk:6, lv:1, xp:0, next:20, gold:0, potion:2, ether:1,
-            def:0, pts:0, eq:{}, owned:[], enh:{}, ore:0, party:[] };
-const G = { area:0, cleared:[], opened:{}, q:{}, comps:{}, shards:0, diff:1, mute:false, ended:false, kills:{}, streak:0 };
+            def:0, pts:0, eq:{}, owned:[], enh:{}, ore:0, spent:{}, party:[] };
+const G = { area:0, cleared:[], opened:{}, q:{}, comps:{}, shards:0, diff:1, mute:false, ended:false, kills:{}, streak:0, gen:{}, genSeq:0 };
 function equip(id) {
   const it = ITEMS[id], old = ITEMS[P.eq[it.slot]];
   const dh = (it.hp||0) - ((old && old.hp)||0), dm = (it.mp||0) - ((old && old.mp)||0);
@@ -315,6 +356,7 @@ function save() { try { localStorage.setItem(SAVE, JSON.stringify({ P, G })); } 
 function load() {
   try { const s = JSON.parse(localStorage.getItem(SAVE)); if (!s || !s.P || !s.P.cls) return false;
     Object.assign(P, s.P); Object.assign(G, s.G);
+    Object.values(G.gen || {}).forEach(it => ITEMS[it.id] = it);
     if (!s.P.eq) {   // 舊存檔:換成同章節的職業專屬裝備
       const old = { weapon:P.weapon, armor:P.armor }; delete P.weapon; delete P.armor; P.eq = {}; P.owned = [];
       Object.keys(old).forEach(sl => { const o = old[sl], it = o && ITEMLIST.find(x => x.slot===sl && x.cls===P.cls && x.t===o.t);
@@ -391,15 +433,12 @@ function move(dx,dy) {
   else if (t==="*") openStar(nx, ny);
   else if (t===">") goArea(G.area+1, false);
   else if (t==="<") goArea(G.area-1, true);
-  else if (t==="B") { say(`${a.boss.i} ${a.boss.n} 擋住了去路!`); startBattle(mk(a.boss)); }
+  else if (t==="B") { say(`${a.boss.i} ${a.boss.n} 擋住了去路!`); startBattle([mk(a.boss)]); }
   else if (t==="." && Math.random() < a.rate) {
     if (Math.random() < .04) {
       const ai = G.area;
-      startBattle(mk({ n:"黃金史萊姆", i:"🟡", hp:30+ai*25, atk:4+ai*3, xp:40+ai*35, g:60+ai*50, rare:true }));
-    } else {
-      const e = a.e[rnd(0, a.e.length-1)];
-      startBattle(mk(e, Math.random() < .06));
-    }
+      startBattle([mk({ n:"黃金史萊姆", i:"🟡", hp:30+ai*25, atk:4+ai*3, xp:40+ai*35, g:60+ai*50, rare:true })]);
+    } else startBattle(groupFor());
   } else say("");
 }
 function goArea(i, back) {
@@ -473,27 +512,47 @@ function talkComp() {
 }
 
 // ---------- 戰鬥 ----------
-function fx(el, cls) { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); }
-function startBattle(e) {
-  foe = e; foe.turn = 0; inBattle = true; busy = false; P.poison = null; P.dodge = 0;
+let foes = [], tgt = 0, hitList = [], dealt = 0;
+function fx(el, cls) { if (!el) return; el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); }
+const living = () => foes.filter(f => f.hp > 0);
+function pickTarget() {
+  if (!foes[tgt] || foes[tgt].hp <= 0) tgt = Math.max(0, foes.findIndex(f => f.hp > 0));
+  return (foe = foes[tgt]);
+}
+function selectTarget(i) { if (busy || !foes[i] || foes[i].hp <= 0) return; tgt = i; foe = foes[i]; renderFoes(); }
+function renderFoes() {
+  const box = $("foes"), n = foes.length;
+  box.style.setProperty("--fs", n===1 ? "clamp(64px,16vw,110px)" : n===2 ? "clamp(52px,12vw,86px)" : "clamp(40px,9vw,66px)");
+  box.innerHTML = foes.map((f,i) => `<div class="fo ${i===tgt && f.hp>0 ? "sel" : ""} ${f.hp<=0 ? "dead" : ""}" id="fo${i}" onclick="selectTarget(${i})">
+    <span class="ic">${f.i}</span><small>${f.n}${f.summoned ? "(召喚)" : ""}${f.stun ? " 💫" : ""}${f.poison && f.poison.t>0 ? " ☠️" : ""}</small>
+    <div class="bar" style="width:90px;margin:4px auto 0;height:8px"><i style="width:${Math.max(0,f.hp/f.mhp*100)}%;background:var(--hp)"></i></div></div>`).join("");
+}
+function groupFor() {
+  const ai = G.area, r = Math.random();
+  const p3 = Math.min(.25, ai*.05), p2 = Math.min(.4, .25 + ai*.03);
+  const n = r < p3 ? 3 : r < p3+p2 ? 2 : 1;
+  return Array.from({ length:n }, () => mk(A().e[rnd(0, A().e.length-1)], Math.random() < .06));
+}
+function startBattle(list) {
+  foes = list; foes.forEach(f => f.turn = 0); tgt = 0; foe = foes[0];
+  inBattle = true; busy = false; P.poison = null; P.dodge = 0;
   $("battle").style.display = "flex";
   $("battle").style.background = THEMES[A().th].bg + "f2";
-  $("foeIcon").textContent = foe.i; $("foeName").textContent = foe.n;
-  $("blog").innerHTML = `${foe.elite ? "⚠️ " : ""}${foe.n} 出現了!`;
+  const names = {}; foes.forEach(f => names[f.n] = (names[f.n]||0) + 1);
+  $("blog").innerHTML = `${foes.some(f => f.elite) ? "⚠️ " : ""}${Object.entries(names).map(([n,c]) => c>1 ? n+" x"+c : n).join("、")} 出現了!${foes.length>1 ? "<br><small>點選敵人可指定目標;標有「全體」的技能會打到所有敵人。</small>" : ""}`;
   refreshBattle();
 }
 function renderCmds() {
   const c = $("cmds"); c.innerHTML = "";
   const add = (label, fn, id) => { const b = document.createElement("button"); b.textContent = label; b.onclick = fn; b.id = id||""; c.appendChild(b); };
   add("⚔️ 攻擊", () => playerAct("atk"), "bAtk");
-  CL().sk.filter(k => P.lv >= k.lv).forEach(k => add(`${k.n} (${k.mp})`, () => playerAct(k.id), "sk_"+k.id));
+  CL().sk.filter(k => P.lv >= k.lv).forEach(k => add(`${k.n}${k.aoe ? " 全體" : k.spread ? " 亂射" : ""} (${k.mp})`, () => playerAct(k.id), "sk_"+k.id));
   add(`🧪 藥水 x${P.potion}`, () => playerAct("potion"), "bPot");
   add(`🔹 魔力水 x${P.ether}`, () => playerAct("ether"), "bEth");
   add("🏃 逃跑", () => playerAct("run"), "bRun");
 }
 function refreshBattle() {
-  $("foeHp").style.width = Math.max(0, foe.hp/foe.mhp*100) + "%";
-  renderCmds();
+  renderFoes(); renderCmds();
   document.querySelectorAll("#cmds button").forEach(b => b.disabled = busy);
   CL().sk.forEach(k => { const b = $("sk_"+k.id); if (b && P.mp < k.mp) b.disabled = true; });
   if (P.potion <= 0) $("bPot").disabled = true;
@@ -502,84 +561,120 @@ function refreshBattle() {
 }
 function blog(t) { $("blog").innerHTML += "<br>" + t; }
 
-let dealt = 0;
 function castSkill(k) {
   const cl = CL(), a = tAtk(); let tot = 0;
-  const strike = (m, add, force) => {
+  const by = new Map();
+  const strike = (t, m, add, force) => {
     let d = Math.round(a*m*(cl.sp + eqf("sp"))) + (add ? rnd(add[0], add[1]) : 0);
     const c = force || Math.random() < critRate(); if (c) d = Math.round(d*1.8);
-    foe.hp -= d; tot += d; return c ? d+"!" : ""+d;
+    t.hp -= d; tot += d; hitList.push(foes.indexOf(t));
+    const e = by.get(t) || { d:0, c:false }; e.d += d; e.c = e.c || c; by.set(t, e);
   };
   if (k.m) {
-    const parts = []; for (let i=0;i<(k.hits||1);i++) parts.push(strike(k.m, k.add, k.crit));
-    blog(`${k.n}!造成 ${tot} 傷害${parts.length>1 ? "("+parts.join("+")+")" : (parts[0].endsWith("!") ? " 暴擊!" : "")}`);
-    fx($("foeIcon"), "shake"); beep(260,.1,"sawtooth");
+    if (k.aoe) living().forEach(t => strike(t, k.m, k.add, k.crit));
+    else if (k.spread) for (let i=0;i<(k.hits||1);i++) { const L = living(); if (L.length) strike(L[rnd(0, L.length-1)], k.m, k.add, k.crit); }
+    else { pickTarget(); for (let i=0;i<(k.hits||1);i++) strike(foe, k.m, k.add, k.crit); }
+    blog(`${k.n}!${[...by].map(([t,e]) => `${t.n} ${e.d}${e.c ? "!" : ""}`).join("、")}`);
+    beep(260,.1,"sawtooth");
   }
   dealt = tot;
   if (k.drain) { const h = Math.ceil(tot/2); P.hp = Math.min(P.mhp, P.hp+h); blog(`回復 ${h} HP。`); }
-  if (k.stun && !foe.boss && Math.random() < k.stun) { foe.stun = 1; blog(`💫 ${foe.n} 無法行動!`); }
-  if (k.poison) { foe.poison = { d:k.poison.d + Math.floor(P.lv/2), t:k.poison.t }; blog(`☠️ ${foe.n} 中毒了。`); }
+  by.forEach((e, t) => {
+    if (k.stun && !t.boss && t.hp > 0 && Math.random() < k.stun) { t.stun = 1; blog(`💫 ${t.n} 無法行動!`); }
+    if (k.poison && t.hp > 0) { t.poison = { d:k.poison.d + Math.floor(P.lv/2), t:k.poison.t }; blog(`☠️ ${t.n} 中毒了。`); }
+  });
   if (k.heal) { const h = k.heal.f ? Math.round(P.mhp*k.heal.f) : 15 + P.lv*2; P.hp = Math.min(P.mhp, P.hp+h); blog(`💚 恢復了 ${h} HP。`); beep(660,.12,"triangle"); }
   if (k.dodge) { P.dodge = k.dodge; blog(`🌫️ 你化作殘影,將閃避接下來 ${k.dodge} 次攻擊。`); }
 }
 function companionTurn() {
   P.party.forEach(id => {
-    if (foe.hp <= 0) return;
-    if (id === "wolf") { const d = Math.round(tAtk()*.5) + rnd(0,3); foe.hp -= d; blog(`🐺 白狼撲咬,造成 ${d} 傷害。`); }
+    if (!living().length) return;
+    if (id === "wolf") { const t = pickTarget(), d = Math.round(tAtk()*.5) + rnd(0,3); t.hp -= d; hitList.push(tgt); blog(`🐺 白狼撲咬 ${t.n},造成 ${d} 傷害。`); }
     else if (id === "fairy") { const h = 5 + Math.round(P.lv*1.5); P.hp = Math.min(P.mhp, P.hp+h); blog(`🧚 妖精為你療傷,回復 ${h} HP。`); }
   });
 }
+// 狂暴 / 頭目倒下時召喚物消散
+function settle() {
+  foes.forEach(f => {
+    if (f.rage && !f.raged && f.hp > 0 && f.hp <= f.mhp/2) {
+      f.raged = true; f.atk += 8; f.hp = Math.min(f.mhp, f.hp + Math.round(f.mhp*.1));
+      blog(`<b>😡 ${f.n} 狂暴了!攻擊力上升並回復了體力!</b>`); beep(110,.3,"sawtooth",.06);
+    }
+  });
+  if (foes.some(f => f.boss && f.hp <= 0) && foes.some(f => f.summoned && f.hp > 0)) {
+    foes.forEach(f => { if (f.summoned) f.hp = 0; }); blog("✨ 頭目倒下,召喚物也隨之消散了。");
+  }
+}
 function playerAct(kind) {
   if (busy) return;
-  busy = true; $("blog").innerHTML = ""; dealt = 0;
+  busy = true; $("blog").innerHTML = ""; dealt = 0; hitList = [];
+  pickTarget();
   const cl = CL(), a = tAtk(), sk = cl.sk.find(k => k.id === kind);
   if (sk) { P.mp -= sk.mp; castSkill(sk); }
   else if (kind==="atk") {
     let d = Math.round(rnd(a-1, a+3) * cl.basic); const c = Math.random() < critRate(); if (c) d = Math.round(d*1.8);
-    foe.hp -= d; dealt = d; blog(`你攻擊 ${foe.n},造成 ${d} 傷害${c?" 暴擊!":"!"}`); fx($("foeIcon"), "shake"); beep(c?440:200,.08,"square");
+    foe.hp -= d; dealt = d; hitList.push(tgt); blog(`你攻擊 ${foe.n},造成 ${d} 傷害${c?" 暴擊!":"!"}`); beep(c?440:200,.08,"square");
   }
   else if (kind==="potion") { P.potion--; P.hp = Math.min(P.mhp, P.hp+25); blog("🧪 喝下藥水,回復 25 HP。"); beep(660,.1,"triangle"); }
   else if (kind==="ether") { P.ether--; P.mp = Math.min(P.mmp, P.mp+15); blog("🔹 喝下魔力水,回復 15 MP。"); beep(740,.1,"triangle"); }
   else if (kind==="run") {
-    if (foe.boss) blog("守護者不讓你逃跑!");
+    if (foes.some(f => f.boss)) blog("守護者不讓你逃跑!");
     else if (Math.random() < 0.6) { G.streak = 0; endBattle("你成功逃跑了。"); return; }
     else blog("逃跑失敗!");
   }
   const steal = eqf("steal");
   if (steal && dealt > 0) { const h = Math.max(1, Math.ceil(dealt*steal)); P.hp = Math.min(P.mhp, P.hp+h); blog(`🦷 吸取了 ${h} HP。`); }
   companionTurn();
-  if (foe.rage && !foe.raged && foe.hp > 0 && foe.hp <= foe.mhp/2) {
-    foe.raged = true; foe.atk += 8; foe.hp = Math.min(foe.mhp, foe.hp + Math.round(foe.mhp*.1));
-    blog(`<b>😡 ${foe.n} 狂暴了!攻擊力上升並回復了體力!</b>`); beep(110,.3,"sawtooth",.06);
-  }
-  refreshBattle();
-  if (foe.hp <= 0) return win();
-  setTimeout(foeTurn, 600);
+  settle();
+  refreshBattle(); hitList.forEach(i => fx($("fo"+i), "shake"));
+  if (!living().length) return win();
+  setTimeout(enemyPhase, 600);
 }
-function foeTurn() {
-  foe.turn++;
-  if (foe.rare && foe.turn >= 3) { endBattle(`💨 ${foe.n} 溜走了……下次要在 3 回合內打倒牠!`); return; }
-  if (foe.poison && foe.poison.t > 0) {
-    foe.hp -= foe.poison.d; foe.poison.t--; blog(`☠️ ${foe.n} 受毒侵蝕,損失 ${foe.poison.d} HP。`);
-    if (foe.hp <= 0) { refreshBattle(); return win(); }
-  }
-  if (foe.stun) { foe.stun = 0; blog(`💫 ${foe.n} 還在昏眩,無法行動!`); busy = false; return refreshBattle(); }
-  if (foe.tr === "heal" && Math.random() < .25) { const h = Math.round(foe.mhp*.12); foe.hp = Math.min(foe.mhp, foe.hp+h); blog(`✨ ${foe.n} 自我修復了 ${h} HP。`); }
-  const heavy = foe.boss && foe.turn % 3 === 0;
-  const crit = foe.tr === "crit" && Math.random() < .25;
-  if (P.dodge > 0) { P.dodge--; blog(`🌫️ 你閃過了 ${foe.n} 的攻擊!`); }
-  else if (Math.random() < dodgeRate()) blog(`💨 你敏捷地閃過了 ${foe.n} 的攻擊!`);
-  else if (P.party.includes("knight") && Math.random() < .3) blog(`💂 騎士擋下了 ${foe.n} 的攻擊!`);
-  else {
-    const mult = heavy ? 1.6 : crit ? 1.6 : 1;
-    const d = Math.max(1, Math.round(rnd(foe.atk-2, foe.atk+2) * mult) - tDef());
-    P.hp -= d; blog(`${foe.n} ${heavy ? "蓄力重擊" : crit ? "致命一擊" : "攻擊你"},受到 ${d} 傷害!`);
-    fx($("wrap"), "flash"); beep(140,.12,"sawtooth");
-    if (foe.tr === "poison" && Math.random() < .35) { P.poison = { d:2 + G.area, t:3 }; blog("☠️ 你中毒了!"); }
-  }
+function enemyPhase() {
+  const list = foes.slice();   // 本回合新召喚的敵人下回合才行動
+  const next = idx => {
+    while (idx < list.length && list[idx].hp <= 0) idx++;
+    if (idx >= list.length) return endRound();
+    if (foeAct(list[idx]) === "fled") return;
+    settle();
+    if (!living().length) { refreshBattle(); return win(); }
+    if (P.hp <= 0) { P.hp = 0; refreshBattle(); return lose(); }
+    refreshBattle();
+    setTimeout(() => next(idx+1), 380);
+  };
+  next(0);
+}
+function endRound() {
   if (P.poison && P.poison.t > 0) { P.hp -= P.poison.d; P.poison.t--; blog(`☠️ 毒發,損失 ${P.poison.d} HP。`); }
   if (P.hp <= 0) { P.hp = 0; refreshBattle(); return lose(); }
   busy = false; refreshBattle();
+}
+function foeAct(f) {
+  foe = f; f.turn++;
+  if (f.rare && f.turn >= 3) { endBattle(`💨 ${f.n} 溜走了……下次要在 3 回合內打倒牠!`); return "fled"; }
+  if (f.poison && f.poison.t > 0) {
+    f.hp -= f.poison.d; f.poison.t--; blog(`☠️ ${f.n} 受毒侵蝕,損失 ${f.poison.d} HP。`);
+    if (f.hp <= 0) return;
+  }
+  if (f.stun) { f.stun = 0; blog(`💫 ${f.n} 還在昏眩,無法行動!`); return; }
+  if (f.sum && f.turn % f.sum.every === 0 && living().length < 5) {
+    const n = Math.min(f.sum.n, 5 - living().length);
+    for (let i=0;i<n;i++) { const m = mk(f.sum.e); m.summoned = true; m.xp = 0; m.g = 0; m.hp = m.mhp = Math.round(m.hp*.7); m.turn = 0; foes.push(m); }
+    blog(`<b>${f.i} ${f.n} 召喚了 ${n} 隻${f.sum.e.n}!</b>`); beep(180,.2,"sawtooth"); return;
+  }
+  if (f.tr === "heal" && Math.random() < .25) { const h = Math.round(f.mhp*.12); f.hp = Math.min(f.mhp, f.hp+h); blog(`✨ ${f.n} 自我修復了 ${h} HP。`); }
+  const heavy = f.boss && f.turn % 3 === 0;
+  const crit = f.tr === "crit" && Math.random() < .25;
+  if (P.dodge > 0) { P.dodge--; blog(`🌫️ 你閃過了 ${f.n} 的攻擊!`); }
+  else if (Math.random() < dodgeRate()) blog(`💨 你敏捷地閃過了 ${f.n} 的攻擊!`);
+  else if (P.party.includes("knight") && Math.random() < .3) blog(`💂 騎士擋下了 ${f.n} 的攻擊!`);
+  else {
+    const mult = heavy ? 1.6 : crit ? 1.6 : 1;
+    const d = Math.max(1, Math.round(rnd(f.atk-2, f.atk+2) * mult) - tDef());
+    P.hp -= d; blog(`${f.n} ${heavy ? "蓄力重擊" : crit ? "致命一擊" : "攻擊你"},受到 ${d} 傷害!`);
+    fx($("wrap"), "flash"); beep(140,.12,"sawtooth");
+    if (f.tr === "poison" && Math.random() < .35) { P.poison = { d:2 + G.area, t:3 }; blog("☠️ 你中毒了!"); }
+  }
 }
 function levelUp() {
   let msg = "";
@@ -587,36 +682,34 @@ function levelUp() {
   while (P.xp >= P.next) {
     P.xp -= P.next; P.lv++; P.next = Math.round(P.next*1.3);
     P.mhp += g.hp; P.mmp += g.mp; P.atk += g.atk; P.pts += 3; P.hp = P.mhp; P.mp = P.mmp;
-    msg += `<br>⭐ 升級!現在 Lv ${P.lv},獲得 3 點能力點(按 C 配點)。`;
+    msg += `<br>⭐ 升級!Lv ${P.lv}:HP +${g.hp} · MP +${g.mp} · 攻擊 +${g.atk} · 能力點 +3(按 C 配點)`;
     CL().sk.filter(k => k.lv === P.lv).forEach(k => msg += `<br>✨ 習得技能 ${k.n}!`);
     jingle([523,659,784,1047]);
   }
   return msg;
 }
 const MILESTONES = { 10:ai => ({ g:50*(ai+1), pts:1 }), 30:() => ({ pts:2, potion:3 }), 60:() => ({ pts:3, ether:3 }), 100:ai => ({ g:300*(ai+1), pts:4 }) };
-function win() {
+function rewardOne(f) {
+  foe = f;
   const a = A();
   const bonus = 1 + Math.min(.4, G.streak*.04);
-  const xpGain = Math.round(foe.xp*bonus), goldGain = Math.round(foe.g*bonus);
+  const xpGain = Math.round(f.xp*bonus), goldGain = Math.round(f.g*bonus);
   P.xp += xpGain; P.gold += goldGain; G.streak++;
-  let msg = `擊敗 ${foe.n}!獲得 ${xpGain} 經驗、${goldGain} 金幣。`;
-  if (G.streak >= 3) msg += ` 🔥 連勝 x${G.streak}(獎勵 +${Math.round((bonus-1)*100)}%)`;
-  const ore = foe.boss || foe.rare ? 5 : foe.elite ? 3 : rnd(1,2);
-  P.ore += ore; msg += `<br>🔩 素材 +${ore}`;
-  if (!foe.boss) {
-    const chance = foe.rare ? .5 : foe.elite ? .2 : .05;
+  let msg = `擊敗 ${f.n}:+${xpGain} 經驗 +${goldGain} 金幣`;
+  if (G.streak >= 3) msg += ` 🔥連勝x${G.streak}(+${Math.round((bonus-1)*100)}%)`;
+  const ore = f.boss || f.rare ? 5 : f.elite ? 3 : rnd(1,2);
+  P.ore += ore; msg += ` 🔩+${ore}`;
+  if (!f.boss) {
+    const chance = f.rare ? .5 : f.elite ? .2 : .06;
     if (Math.random() < chance) {
-      const lo = foe.elite || foe.rare ? G.area : Math.max(0, G.area-1);
-      const pool = ITEMLIST.filter(it => !it.drop && it.t >= lo && it.t <= G.area+1 && (!it.cls || it.cls === P.cls) && !P.owned.includes(it.id));
-      if (pool.length) { const it = pool[rnd(0, pool.length-1)]; P.owned.push(it.id);
-        msg += `<br>🎁 掉落裝備:<b>${itemIcon(it)} ${it.n}</b>(${descItem(it)}),可在 🎒 裝備面板穿上!`; }
-    }
+      const it = rollItem(G.area + rnd(-1,0) + (f.elite || f.rare ? 1 : 0), f.elite, f.rare);
+      msg += dropItem(it);
+    } else if (Math.random() < 0.2) { P.potion++; msg += " 🧪+1"; }
   }
-  const kn = foe.base, kc = G.kills[kn] = (G.kills[kn] || 0) + 1;
+  const kn = f.base, kc = G.kills[kn] = (G.kills[kn] || 0) + 1;
   const ms = MILESTONES[kc];
   if (ms) { msg += `<br>📖 圖鑑里程碑:累計擊敗 ${kn} ${kc} 隻!獎勵 ${rewardText(ms(G.area))}`; jingle([659,784,988]); }
-  jingle([392,523,659]);
-  if (foe.boss) {
+  if (f.boss) {
     G.cleared[G.area] = true; const [bx,by] = a.gate.b; cur()[by][bx] = ".";
     P.pts += 2; msg += `<br>🎁 能力點 +2。`;
     const dr = ITEMS[a.boss.drop];
@@ -630,23 +723,27 @@ function win() {
     } else if (G.area === 5) {
       msg += `<br><br>🎉 <b>魔王被擊敗了!世界恢復和平!</b><br>不過……王座後方的傳送門${G.shards>=4?"正在發光,你可以前往隱藏關卡!":"似乎還需要 ⭐ 星之碎片(" + G.shards + "/4)才能開啟。"}`;
     } else msg += `<br>🌀 傳送門解除封印了!`;
-  } else if (Math.random() < 0.2) { P.potion++; msg += " 撿到一瓶🧪藥水!"; }
+  }
   const s = G.q[G.area], q = a.npc.quests[s ? s.i : 0];
-  if (s && q && s.st === 1 && foe.base === q.k && s.c < q.n) {
+  if (s && q && s.st === 1 && kn === q.k && s.c < q.n) {
     s.c++; msg += `<br>📜 任務進度 ${s.c}/${q.n}${s.c >= q.n ? ",回去找" + a.npc.n + "領獎吧!" : ""}`;
   }
-  msg += levelUp();
-  endBattle(msg);
+  return msg;
+}
+function win() {
+  jingle([392,523,659]);
+  const lines = foes.filter(f => !f.summoned).map(rewardOne);
+  endBattle(lines.join("<br>") + levelUp());
 }
 function lose() {
-  $("battle").style.display = "none"; inBattle = false; P.poison = null; P.dodge = 0;
+  $("battle").style.display = "none"; inBattle = false; P.poison = null; P.dodge = 0; foes = [];
   const lost = Math.floor(P.gold/2); P.gold -= lost; G.streak = 0;
   P.hp = P.mhp; P.mp = P.mmp; [P.x, P.y] = A().from;
   hud(); draw(); save(); jingle([220,196,165]);
   say(`💀 你倒下了……被好心人送回了章節入口,損失 ${lost} 金幣,HP / MP 已回復。`);
 }
 function endBattle(msg) {
-  inBattle = false; P.poison = null; P.dodge = 0; $("battle").style.display = "none"; hud(); draw(); save(); if (msg) say(msg);
+  inBattle = false; P.poison = null; P.dodge = 0; foes = []; $("battle").style.display = "none"; hud(); draw(); save(); if (msg) say(msg);
 }
 
 // ---------- 面板 ----------
@@ -671,14 +768,29 @@ function startGame(k) {
   say(`你是年輕的${c.n}。先和 🧓 村長 說話接任務,擊敗每章的守護者,穿過 🌀 傳送門,一路挑戰魔王!<br><small>P 藥水 · E 魔力水 · C 角色面板 · 進度會自動存檔</small>`);
 }
 
+const effv = (it, k) => it ? (it[k]||0) + (it.slot==="weapon" && k==="atk" ? enhOf(it.id)*2 : 0) + (it.slot==="armor" && k==="def" ? enhOf(it.id) : 0) : 0;
+function cmpText(it) {
+  const cur = ITEMS[P.eq[it.slot]]; if (!cur || cur.id === it.id) return "";
+  return Object.keys(FXN).map(k => {
+    const d = effv(it,k) - effv(cur,k); if (!d) return "";
+    const v = FXN[k][1] ? Math.round(Math.abs(d)*1000)/10 + "%" : Math.abs(d);
+    return `<span style="color:${d>0 ? "#6fdc8c" : "#ff7b7b"}">${FXN[k][0]}${d>0 ? "▲" : "▼"}${v}</span>`;
+  }).filter(Boolean).join(" ");
+}
 function itemRow(it, shop) {
-  const owned = P.owned.includes(it.id), on = P.eq[it.slot] === it.id;
+  const owned = P.owned.includes(it.id), on = P.eq[it.slot] === it.id, lv = enhOf(it.id);
   const btn = on ? `<button disabled>裝備中</button>`
     : owned ? `<button onclick="equipItem('${it.id}',${shop})">裝備</button>`
     : `<button onclick="buyItem('${it.id}')" ${P.gold<it.p?"disabled":""}>💰${it.p}</button>`;
-  const lv = enhOf(it.id);
-  return `<div class="row"><span>${itemIcon(it)} ${it.n}${lv ? " +"+lv : ""} <small>${descItem(it)}${lv ? " · 強化 "+(it.slot==="weapon" ? "攻擊+"+lv*2 : "防禦+"+lv) : ""}</small></span>${btn}</div>`;
+  const extra = !shop && owned && !on && !it.drop
+    ? `<button onclick="sellItem('${it.id}')" ${lv?"disabled":""}>賣 💰${sellValue(it)}</button><button onclick="salvageItem('${it.id}')" ${lv?"disabled":""}>分解 🔩${salvageValue(it)}</button>` : "";
+  const cmp = on ? "" : cmpText(it);
+  return `<div class="row" style="align-items:flex-start"><span style="color:${it.gen ? RARITY[it.rar].c : "inherit"}">${itemIcon(it)} ${it.n}${lv ? " +"+lv : ""}
+    <small style="color:var(--text)">${descItem(it)}${lv ? " · 強化 "+(it.slot==="weapon" ? "攻擊+"+lv*2 : "防禦+"+lv) : ""}</small>${cmp ? `<br><small>相較目前:${cmp}</small>` : ""}</span>
+    <span style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">${btn}${extra}</span></div>`;
 }
+function sellItem(id) { const it = ITEMS[id]; if (!it || enhOf(id)) return; P.gold += sellValue(it); removeItem(id); hud(); save(); beep(520,.06,"triangle"); openEquip(); }
+function salvageItem(id) { const it = ITEMS[id]; if (!it || enhOf(id)) return; P.ore += salvageValue(it); removeItem(id); hud(); save(); beep(400,.06,"triangle"); openEquip(); }
 function openShop() {
   const stock = ITEMLIST.filter(it => !it.drop && it.t <= G.area && (!it.cls || it.cls === P.cls));
   const sec = sl => `<h2 style="margin-top:10px">${SLOTS[sl]}${sl==="acc"?"(全職業通用)":"(" + CL().n + "專用)"}</h2>` + stock.filter(i => i.slot === sl).map(i => itemRow(i, true)).join("");
@@ -712,7 +824,8 @@ function openEquip() {
     const lv = enhOf(id), c = enhCost(id);
     return `<div class="row"><span>🔨 強化 ${ITEMS[id].n} <small>+${lv} → ${lv>=10?"已滿級":"+"+(lv+1)}</small></span>`
       + (lv >= 10 ? `<button disabled>已滿級</button>` : `<button onclick="enhance('${id}')" ${P.gold<c.g||P.ore<c.ore?"disabled":""}>💰${c.g} 🔩${c.ore}</button>`) + `</div>`; };
-  const mine = sl => P.owned.map(id => ITEMS[id]).filter(it => it.slot === sl && (!it.cls || it.cls === P.cls));
+  const mine = sl => P.owned.map(id => ITEMS[id]).filter(it => it.slot === sl && (!it.cls || it.cls === P.cls))
+    .sort((x,y) => ((y.rar||0)-(x.rar||0)) || ((y.atk||y.def||0)-(x.atk||x.def||0)));
   const sec = sl => `<h2 style="margin-top:10px">${SLOTS[sl]}:${P.eq[sl] ? itemIcon(ITEMS[P.eq[sl]]) + " " + eqName(sl) : eqName(sl)}</h2>`
     + enhRow(sl) + (mine(sl).map(it => itemRow(it, false)).join("") || `<div class="row"><span style="opacity:.6">還沒有${SLOTS[sl]}</span></div>`);
   openModal(`<h2>🎒 裝備 · ${CL().i} ${CL().n} · 🔩素材 ${P.ore} · 💰 ${P.gold}</h2>
@@ -729,18 +842,26 @@ function openCodex() {
   openModal(`<h2>📖 怪物圖鑑</h2><div style="opacity:.75;margin-bottom:6px">累計擊敗 10 / 30 / 60 / 100 隻會獲得獎勵(能力點、金幣、道具)。連勝越多,經驗和金幣加成越高(最多 +40%);怪物也會掉落裝備和 🔩 素材。</div>
     ${rows}<button style="margin-top:10px" onclick="closeModal()">關閉</button>`);
 }
+const PT = { mhp:6, mmp:3, atk:1, def:1 };
 function openStats() {
   if (inBattle) return;
-  const cl = CL();
-  const row = (label, key) => `<div class="row"><span>${label}</span><button onclick="spend('${key}')" ${P.pts<1?"disabled":""}>+ 1點</button></div>`;
+  const cl = CL(), sp = P.spent || {};
+  const row = (label, key) => {
+    const n = sp[key] || 0, cur = key==="mhp" ? P.mhp : key==="mmp" ? P.mmp : key==="atk" ? tAtk() : tDef();
+    return `<div class="row"><span>${label} <b>+${PT[key]}</b> <small>(${cur} → ${cur+PT[key]}) · 已投入 ${n} 點 = +${n*PT[key]}</small></span><button onclick="spend('${key}')" ${P.pts<1?"disabled":""}>+ 1點</button></div>`; };
+  const part = (name, v) => v ? ` ${name} ${v>0?"+":""}${v}` : "";
+  const baseAtk = cl.atk + (P.lv-1)*cl.g.atk + (sp.atk||0), baseHp = cl.hp + (P.lv-1)*cl.g.hp + (sp.mhp||0)*6, baseMp = cl.mp + (P.lv-1)*cl.g.mp + (sp.mmp||0)*3;
   const n = A().npc, s = G.q[G.area] || { i:0, st:0, c:0 }, q = n.quests[s.i];
   const qtxt = !q ? "✅ 本章委託全部完成" : s.st===0 ? `尚未接取(找 ${n.i}${n.n})` : `${q.txt}(${s.c}/${q.n})`;
   const comps = Object.keys(COMPS).filter(id => G.comps[id]);
   openModal(`<h2>${cl.i} ${cl.n} Lv ${P.lv} · 能力點 ${P.pts}</h2>
-    <div class="row"><span>❤️ HP ${P.hp}/${P.mhp}</span><span>🔷 MP ${P.mp}/${P.mmp}</span></div>
-    <div class="row"><span>⚔️ 攻擊 ${tAtk()} (${eqName("weapon")})</span><span>🛡️ 防禦 ${tDef()} (${eqName("armor")})</span></div>
-    <div class="row"><span>💍 飾品:${eqName("acc")}</span><span>暴擊 ${Math.round(critRate()*100)}% · 閃避 ${Math.round(dodgeRate()*100)}%</span></div>
-    ${row("提升 HP 上限 +6","mhp")}${row("提升 MP 上限 +3","mmp")}${row("提升 攻擊 +1","atk")}${row("提升 防禦 +1","def")}
+    <div class="row"><span>📈 每升 1 級</span><span>HP +${cl.g.hp} · MP +${cl.g.mp} · 攻擊 +${cl.g.atk} · 能力點 +3</span></div>
+    <div class="row"><span>❤️ HP ${P.hp}/${P.mhp}<br><small>= 職業 ${cl.hp} + 升級 ${(P.lv-1)*cl.g.hp} + 配點 ${(sp.mhp||0)*6} + 裝備 ${eqf("hp")}${part("其他", P.mhp-baseHp-eqf("hp"))}</small></span>
+      <span>🔷 MP ${P.mp}/${P.mmp}<br><small>= 職業 ${cl.mp} + 升級 ${(P.lv-1)*cl.g.mp} + 配點 ${(sp.mmp||0)*3} + 裝備 ${eqf("mp")}${part("其他", P.mmp-baseMp-eqf("mp"))}</small></span></div>
+    <div class="row"><span>⚔️ 攻擊 ${tAtk()}(${eqName("weapon")})<br><small>= 職業 ${cl.atk} + 升級 ${(P.lv-1)*cl.g.atk} + 配點 ${sp.atk||0} + 裝備 ${eqf("atk")}${part("其他", P.atk-baseAtk)}</small></span>
+      <span>🛡️ 防禦 ${tDef()}(${eqName("armor")})<br><small>= 配點 ${sp.def||0} + 裝備 ${eqf("def")}${part("其他", P.def-(sp.def||0))}</small></span></div>
+    <div class="row"><span>💍 飾品:${eqName("acc")}</span><span>暴擊 ${Math.round(critRate()*100)}% · 閃避 ${Math.round(dodgeRate()*100)}%${eqf("sp")?" · 技能威力 +"+Math.round(eqf("sp")*100)+"%":""}${eqf("steal")?" · 吸血 "+Math.round(eqf("steal")*100)+"%":""}</span></div>
+    ${row("提升 HP 上限","mhp")}${row("提升 MP 上限","mmp")}${row("提升 攻擊","atk")}${row("提升 防禦","def")}
     <h2 style="margin-top:12px">本章任務</h2><div class="row"><span>📜 ${qtxt}</span></div>
     <h2 style="margin-top:12px">夥伴(最多出戰 2 位)</h2>
     ${comps.length ? comps.map(id => `<div class="row"><span>${COMPS[id].i} ${COMPS[id].n} <small>${COMPS[id].d}</small></span>
@@ -756,6 +877,7 @@ function openStats() {
 }
 function spend(key) {
   if (P.pts<1) return; P.pts--;
+  P.spent = P.spent || {}; P.spent[key] = (P.spent[key]||0) + 1;
   if (key==="mhp") { P.mhp+=6; P.hp+=6; } else if (key==="mmp") { P.mmp+=3; P.mp+=3; } else P[key]++;
   hud(); save(); openStats();
 }
