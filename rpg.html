@@ -40,6 +40,11 @@
   .seg { display:flex; gap:6px; margin:6px 0; }
   .seg button { flex:1; padding:7px 4px; font-size:14px; }
   .seg button.on { border-color:var(--xp); background:#2a2f45; }
+  #toasts { position:absolute; top:10px; left:50%; transform:translateX(-50%); display:flex; flex-direction:column; gap:6px; z-index:10; pointer-events:none; width:min(92%,420px); }
+  .toast { background:#2a2f45; border:1px solid var(--xp); border-radius:10px; padding:8px 12px; font-size:14px; line-height:1.4; box-shadow:0 4px 18px #0008; animation:pop .25s; }
+  @keyframes pop { from { transform:translateY(-10px); opacity:0 } to { transform:none; opacity:1 } }
+  .actbar { display:flex; gap:6px; flex-wrap:wrap; margin-top:12px; }
+  .actbar button { flex:1; padding:8px 6px; font-size:14px; white-space:nowrap; }
   .tabs { display:flex; gap:6px; margin:8px 0; }
   .tabs button { flex:1; padding:8px 4px; font-size:14px; }
   .tabs button.on { border-color:var(--xp); background:#2a2f45; }
@@ -94,6 +99,7 @@
     </div>
   </div>
   <div id="modal"></div>
+  <div id="toasts"></div>
 </div>
 <div id="log"></div>
 <button id="menuBtn" style="margin-top:8px">📋 角色 / 技能 / 夥伴 / 設定 (C) · 🎒 裝備 (I) · 📖 圖鑑 (B)</button>
@@ -101,7 +107,7 @@
   <span></span><button data-d="0,-1">▲</button><span></span>
   <button data-d="-1,0">◀</button><button data-d="0,1">▼</button><button data-d="1,0">▶</button>
 </div>
-<div class="tip">方向鍵 / WASD 移動 · 與 NPC 說話接任務 · 🏠旅店回復 · 🏪商店 · 📦寶箱 · 擊敗守護者開啟🌀傳送門 · 集齊 4 枚 ⭐ 星之碎片可進入隱藏關卡</div>
+<div class="tip">方向鍵 / WASD 移動 · 與 NPC 說話接任務 · 🏠旅店回復 · 🏪商店 · 📦寶箱 · 擊敗守護者開啟🌀傳送門 · 集齊 4 枚 ⭐ 星之碎片可進入隱藏關卡 · 🗼試煉之塔(T) · 🏆成就(V)</div>
 
 <script>
 const $ = id => document.getElementById(id);
@@ -348,7 +354,7 @@ const dodgeRate = () => Math.min(.5, CL().dodge + eqf("dodge"));
 // ---------- 狀態 ----------
 const P = { x:2, y:17, cls:null, hp:30, mhp:30, mp:10, mmp:10, atk:6, lv:1, xp:0, next:20, gold:0, potion:2, ether:1,
             def:0, pts:0, eq:{}, owned:[], enh:{}, ore:0, spent:{}, party:[] };
-const G = { area:0, cleared:[], opened:{}, q:{}, comps:{}, shards:0, diff:1, mute:false, ended:false, kills:{}, streak:0, gen:{}, genSeq:0 };
+const G = { area:0, cleared:[], opened:{}, q:{}, comps:{}, shards:0, diff:1, mute:false, ended:false, kills:{}, streak:0, gen:{}, genSeq:0, ach:{}, tower:{ best:0 }, bestStreak:0 };
 function equip(id) {
   const it = ITEMS[id], old = ITEMS[P.eq[it.slot]];
   const dh = (it.hp||0) - ((old && old.hp)||0), dm = (it.mp||0) - ((old && old.mp)||0);
@@ -441,6 +447,7 @@ function hud() {
   const goal = a.last ? (c ? "已通關!" : "目標:擊敗 "+a.boss.n) : (c ? "前往傳送門 🌀" : "目標:擊敗 "+a.boss.n);
   const party = P.party.map(id => COMPS[id].i).join("");
   $("area").innerHTML = `📍 ${a.hidden ? "隱藏" : "第 "+(G.area+1)+" 章"} · ${a.name}　<small>${goal}${G.shards ? " · ⭐"+G.shards+"/4" : ""}${party ? " · 夥伴 "+party : ""}${G.streak>=2 ? " · 🔥連勝x"+G.streak : ""} · ${DIFFS[G.diff].n}</small>`;
+  if (tw) $("area").innerHTML = `🗼 試煉之塔 · 第 ${tw.floor} 層　<small>最高紀錄 ${G.tower.best} 層 · ${DIFFS[G.diff].n}</small>`;
 }
 function draw() {
   const a = A(), th = THEMES[a.th], g = cur();
@@ -497,10 +504,11 @@ function move(dx,dy) {
       const ai = G.area;
       startBattle([mk({ n:"黃金史萊姆", i:"🟡", hp:30+ai*25, atk:4+ai*3, xp:40+ai*35, g:60+ai*50, rare:true })]);
     } else startBattle(groupFor());
-  } else say("");
+  } else if (t === "." && Math.random() < .035) randomEvent();
+  else say("");
 }
 function goArea(i, back) {
-  G.area = i;
+  G.area = i; setTimeout(checkAch, 0);
   const a = AREAS[i];
   [P.x, P.y] = back ? a.gate.b : a.from;
   hud(); draw(); save(); jingle([523,659]);
@@ -541,6 +549,7 @@ function rewardText(r) {
   if (r.pts) { P.pts += r.pts; out.push(`✨能力點+${r.pts}`); }
   if (r.potion) { P.potion += r.potion; out.push(`🧪x${r.potion}`); }
   if (r.ether) { P.ether += r.ether; out.push(`🔹x${r.ether}`); }
+  if (r.ore) { P.ore += r.ore; out.push(`🔩x${r.ore}`); }
   return out.join(" ");
 }
 function talk() {
@@ -819,23 +828,23 @@ function rewardOne(f) {
   const a = A();
   const bonus = 1 + Math.min(.4, G.streak*.04);
   const xpGain = Math.round(f.xp*bonus); let goldGain = Math.round(f.g*bonus);
-  P.xp += xpGain; P.gold += goldGain; G.streak++; battleXp += xpGain;
+  P.xp += xpGain; P.gold += goldGain; G.streak++; G.bestStreak = Math.max(G.bestStreak || 0, G.streak); battleXp += xpGain;
   if (f.loot) { P.gold += f.loot; goldGain += f.loot; }
   let msg = `擊敗 ${f.n}:+${xpGain} 經驗 +${goldGain} 金幣${f.loot ? "(含奪回 "+f.loot+")" : ""}`;
   if (G.streak >= 3) msg += ` 🔥連勝x${G.streak}(+${Math.round((bonus-1)*100)}%)`;
   const ore = f.boss || f.rare ? 5 : f.elite ? 3 : rnd(1,2);
   P.ore += ore; msg += ` 🔩+${ore}`;
   if (!f.boss) {
-    const chance = f.rare ? .5 : f.elite ? .2 : .06;
+    const chance = f.mimic ? 1 : f.rare ? .5 : f.elite ? .2 : .06;
     if (Math.random() < chance) {
-      const it = rollItem(G.area + rnd(-1,0) + (f.elite || f.rare ? 1 : 0), f.elite, f.rare);
+      const it = rollItem((f.tier != null ? f.tier : G.area) + rnd(-1,0) + (f.elite || f.rare || f.mimic ? 1 : 0), f.elite || f.mimic, f.rare);
       msg += dropItem(it);
     } else if (Math.random() < 0.2) { P.potion++; msg += " 🧪+1"; }
   }
   const kn = f.base, kc = G.kills[kn] = (G.kills[kn] || 0) + 1;
   const ms = MILESTONES[kc];
   if (ms) { msg += `<br>📖 圖鑑里程碑:累計擊敗 ${kn} ${kc} 隻!獎勵 ${rewardText(ms(G.area))}`; jingle([659,784,988]); }
-  if (f.boss) {
+  if (f.boss && !f.tower) {
     G.cleared[G.area] = true; const [bx,by] = a.gate.b; cur()[by][bx] = ".";
     P.pts += 2; msg += `<br>🎁 能力點 +2。`;
     const dr = ITEMS[a.boss.drop];
@@ -851,19 +860,23 @@ function rewardOne(f) {
     } else msg += `<br>🌀 傳送門解除封印了!`;
   }
   const s = G.q[G.area], q = a.npc.quests[s ? s.i : 0];
-  if (s && q && s.st === 1 && kn === q.k && s.c < q.n) {
+  if (s && q && !f.tower && s.st === 1 && kn === q.k && s.c < q.n) {
     s.c++; msg += `<br>📜 任務進度 ${s.c}/${q.n}${s.c >= q.n ? ",回去找" + a.npc.n + "領獎吧!" : ""}`;
   }
   return msg;
 }
 function win() {
-  jingle([392,523,659]);
+  jingle([392,523,659]); if (tw) tw.won = true;
   battleXp = 0;
   const lines = foes.filter(f => !f.summoned && !f.boomed).map(rewardOne);
   endBattle((lines.join("<br>") || "戰鬥結束了。") + compGain(battleXp) + levelUp());
 }
 function lose() {
   $("battle").style.display = "none"; inBattle = false; P.poison = null; P.dodge = 0; P.stunned = 0; P.weak = null; P.revived = false; foes = [];
+  if (tw) {   // 試煉之塔:倒下只是結束挑戰,不扣金幣
+    const f = tw.floor; tw = null; G.streak = 0; P.hp = P.mhp; P.mp = P.mmp; hud(); draw(); save(); checkAch();
+    return say(`🗼 你在第 ${f} 層倒下了……挑戰結束。最高紀錄:第 ${G.tower.best} 層。(HP / MP 已回復)`);
+  }
   const lost = Math.floor(P.gold/2); P.gold -= lost; G.streak = 0;
   P.hp = P.mhp; P.mp = P.mmp; [P.x, P.y] = A().from;
   hud(); draw(); save(); jingle([220,196,165]);
@@ -871,6 +884,8 @@ function lose() {
 }
 function endBattle(msg) {
   inBattle = false; P.poison = null; P.dodge = 0; P.stunned = 0; P.weak = null; P.revived = false; foes = []; $("battle").style.display = "none"; hud(); draw(); save(); if (msg) say(msg);
+  if (tw) towerAfter(msg);
+  checkAch();
 }
 
 // ---------- 面板 ----------
@@ -878,7 +893,7 @@ function openModal(html) {   // 面板已開著時重繪,保留捲動位置
   const m = $("modal"), keep = m.style.display === "flex" ? m.scrollTop : 0;
   m.innerHTML = html; m.style.display = "flex"; inBattle = true; m.scrollTop = keep;
 }
-function closeModal() { $("modal").style.display = "none"; inBattle = false; hud(); }
+function closeModal() { cleanMerch(); $("modal").style.display = "none"; inBattle = false; hud(); }
 
 function openTitle(pick) {
   const d = typeof pick === "number" ? pick : G.diff;
@@ -967,7 +982,7 @@ const enhCost = id => { const lv = enhOf(id); return { g:Math.round(40*(lv+1)*(1
 function enhance(id) {
   const lv = enhOf(id); if (lv >= 10) return;
   const c = enhCost(id); if (P.gold < c.g || P.ore < c.ore) return;
-  P.gold -= c.g; P.ore -= c.ore; P.enh[id] = lv + 1; hud(); save(); jingle([523,659]); openEquip();
+  P.gold -= c.g; P.ore -= c.ore; P.enh[id] = lv + 1; hud(); save(); jingle([523,659]); openEquip(); checkAch();
 }
 function openEquip() {
   const eqIds = Object.values(P.eq);
@@ -1005,6 +1020,9 @@ function openCodex() {
     ${rows}<button style="margin-top:10px" onclick="closeModal()">關閉</button>`);
 }
 const PT = { mhp:6, mmp:3, atk:1, def:1 };
+let statsTab = "stat";
+const STABS = { stat:"能力", skill:"技能", comp:"夥伴", set:"設定" };
+const setStatsTab = k => { statsTab = k; openStats(true); };
 function openStats(force) {
   if (inBattle && !force) return;
   const cl = CL(), sp = P.spent || {};
@@ -1016,26 +1034,32 @@ function openStats(force) {
   const n = A().npc, s = G.q[G.area] || { i:0, st:0, c:0 }, q = n.quests[s.i];
   const qtxt = !q ? "✅ 本章委託全部完成" : s.st===0 ? `尚未接取(找 ${n.i}${n.n})` : `${q.txt}(${s.c}/${q.n})`;
   const comps = Object.keys(COMPS).filter(id => G.comps[id]);
-  openModal(`<h2>${cl.i} ${cl.n} Lv ${P.lv} · 能力點 ${P.pts}</h2>
+  const chips = [`❤️ HP ${P.hp}/${P.mhp}`, `🔷 MP ${P.mp}/${P.mmp}`, `⚔️ 攻擊 ${tAtk()}`, `🛡️ 防禦 ${tDef()}`, `🎯 暴擊 ${Math.round(critRate()*100)}%`, `💨 閃避 ${Math.round(dodgeRate()*100)}%`,
+    eqf("sp") ? `✨ 技能威力 +${Math.round(eqf("sp")*100)}%` : "", eqf("steal") ? `🦷 吸血 ${Math.round(eqf("steal")*100)}%` : ""].filter(Boolean).map(c => `<span class="chip">${c}</span>`).join("");
+  let body;
+  if (statsTab === "stat") body = `<div class="sumbar">${chips}</div>
     <div class="row"><span>📈 每升 1 級</span><span>HP +${cl.g.hp} · MP +${cl.g.mp} · 攻擊 +${cl.g.atk} · 能力點 +3</span></div>
-    <div class="row"><span>❤️ HP ${P.hp}/${P.mhp}<br><small>= 職業 ${cl.hp} + 升級 ${(P.lv-1)*cl.g.hp} + 配點 ${(sp.mhp||0)*6} + 裝備 ${eqf("hp")}${part("其他", P.mhp-baseHp-eqf("hp"))}</small></span>
-      <span>🔷 MP ${P.mp}/${P.mmp}<br><small>= 職業 ${cl.mp} + 升級 ${(P.lv-1)*cl.g.mp} + 配點 ${(sp.mmp||0)*3} + 裝備 ${eqf("mp")}${part("其他", P.mmp-baseMp-eqf("mp"))}</small></span></div>
-    <div class="row"><span>⚔️ 攻擊 ${tAtk()}(${eqName("weapon")})<br><small>= 職業 ${cl.atk} + 升級 ${(P.lv-1)*cl.g.atk} + 配點 ${sp.atk||0} + 裝備 ${eqf("atk")}${part("其他", P.atk-baseAtk)}</small></span>
-      <span>🛡️ 防禦 ${tDef()}(${eqName("armor")})<br><small>= 配點 ${sp.def||0} + 裝備 ${eqf("def")}${part("其他", P.def-(sp.def||0))}</small></span></div>
-    <div class="row"><span>💍 飾品:${eqName("acc")}</span><span>暴擊 ${Math.round(critRate()*100)}% · 閃避 ${Math.round(dodgeRate()*100)}%${eqf("sp")?" · 技能威力 +"+Math.round(eqf("sp")*100)+"%":""}${eqf("steal")?" · 吸血 "+Math.round(eqf("steal")*100)+"%":""}</span></div>
     ${row("提升 HP 上限","mhp")}${row("提升 MP 上限","mmp")}${row("提升 攻擊","atk")}${row("提升 防禦","def")}
-    <h2 style="margin-top:12px">本章任務</h2><div class="row"><span>📜 ${qtxt}</span></div>
-    <h2 style="margin-top:12px">夥伴(最多出戰 2 位)</h2>
-    ${comps.length ? comps.map(id => `<div class="row"><span>${COMPS[id].i} ${COMPS[id].n} <b>Lv ${compLv(id)}</b> <small>XP ${G.comps[id].xp}/${compXpNeed(compLv(id))}<br>${compDesc(id)}</small></span>
+    <h2 style="margin-top:12px">數值組成</h2>
+    <div class="row"><span>❤️ HP 上限 ${P.mhp}</span><small>職業 ${cl.hp} + 升級 ${(P.lv-1)*cl.g.hp} + 配點 ${(sp.mhp||0)*6} + 裝備 ${eqf("hp")}${part("其他", P.mhp-baseHp-eqf("hp"))}</small></div>
+    <div class="row"><span>🔷 MP 上限 ${P.mmp}</span><small>職業 ${cl.mp} + 升級 ${(P.lv-1)*cl.g.mp} + 配點 ${(sp.mmp||0)*3} + 裝備 ${eqf("mp")}${part("其他", P.mmp-baseMp-eqf("mp"))}</small></div>
+    <div class="row"><span>⚔️ 攻擊 ${tAtk()}</span><small>職業 ${cl.atk} + 升級 ${(P.lv-1)*cl.g.atk} + 配點 ${sp.atk||0} + 裝備 ${eqf("atk")}${part("其他", P.atk-baseAtk)}</small></div>
+    <div class="row"><span>🛡️ 防禦 ${tDef()}</span><small>配點 ${sp.def||0} + 裝備 ${eqf("def")}${part("其他", P.def-(sp.def||0))}</small></div>
+    <h2 style="margin-top:12px">本章任務</h2><div class="row"><span>📜 ${qtxt}</span></div>`;
+  else if (statsTab === "skill") body = `<div style="opacity:.75;margin-bottom:4px">${cl.i} ${cl.n}的技能(等級到了會自動習得)</div>`
+    + cl.sk.map(k => `<div class="row" style="opacity:${P.lv>=k.lv?1:.45}"><span>${k.n} <small>${k.d}</small></span><span>${P.lv>=k.lv ? "MP "+k.mp : "Lv "+k.lv+" 解鎖"}</span></div>`).join("");
+  else if (statsTab === "comp") body = `<div style="opacity:.75;margin-bottom:4px">最多同時出戰 2 位夥伴;出戰拿 60% 經驗,待命拿 30%。</div>`
+    + (comps.length ? comps.map(id => `<div class="row"><span>${COMPS[id].i} ${COMPS[id].n} <b>Lv ${compLv(id)}</b> <small>XP ${G.comps[id].xp}/${compXpNeed(compLv(id))}<br>${compDesc(id)}</small></span>
       <button onclick="togglePartner('${id}')">${P.party.includes(id) ? "✔ 出戰中" : "待命"}</button></div>`).join("")
-      : `<div class="row"><span style="opacity:.6">尚無夥伴。到各章找 🐺🧚💂 吧。</span></div>`}
-    <h2 style="margin-top:12px">技能</h2>
-    ${cl.sk.map(k => `<div class="row" style="opacity:${P.lv>=k.lv?1:.4}"><span>${k.n} <small>${k.d}</small></span><span>${P.lv>=k.lv?"MP "+k.mp:"Lv "+k.lv+" 解鎖"}</span></div>`).join("")}
-    <h2 style="margin-top:12px">設定</h2>
-    <div style="opacity:.8">難度(隨時可調整)</div>
+      : `<div class="row"><span style="opacity:.6">尚無夥伴。到各章找 🐺🧚💂 吧。</span></div>`);
+  else body = `<div style="opacity:.8">難度(隨時可調整)</div>
     <div class="seg">${DIFFS.map((x,i) => `<button class="${i===G.diff?"on":""}" onclick="setDiff(${i})">${x.n}</button>`).join("")}</div>
-    <div class="seg"><button onclick="toggleMute()">${G.mute ? "🔇 音效:關" : "🔊 音效:開"}</button></div>
-    <div style="display:flex;gap:8px;margin-top:10px"><button style="flex:1" onclick="closeModal()">關閉</button><button onclick="openEquip()">🎒 裝備 (I)</button><button onclick="openCodex()">📖 圖鑑 (B)</button><button onclick="newGame()">🔄 新遊戲</button></div>`);
+    <div class="seg"><button onclick="toggleMute()">${G.mute ? "🔇 音效:關" : "🔊 音效:開"}</button><button onclick="newGame()">🔄 新遊戲</button></div>
+    <div style="opacity:.6;font-size:13px;margin-top:8px">快捷鍵:方向鍵/WASD 移動 · C 角色 · I 裝備 · B 圖鑑 · V 成就 · T 試煉之塔 · P 藥水 · E 魔力水</div>`;
+  openModal(`<h2>${cl.i} ${cl.n} Lv ${P.lv} · 能力點 ${P.pts}</h2>
+    <div class="tabs">${Object.entries(STABS).map(([k,nm]) => `<button class="${k===statsTab?"on":""}" onclick="setStatsTab('${k}')">${nm}${k==="stat" && P.pts ? " ●" : ""}</button>`).join("")}</div>
+    ${body}
+    <div class="actbar"><button onclick="closeModal()">關閉</button><button onclick="openEquip()">🎒 裝備</button><button onclick="openCodex()">📖 圖鑑</button><button onclick="openAch()">🏆 成就</button><button onclick="closeModal();openTower()">🗼 試煉之塔</button></div>`);
 }
 function spend(key) {
   if (P.pts<1) return; P.pts--;
@@ -1067,14 +1091,167 @@ function useEther() {
   P.ether--; P.mp = Math.min(P.mmp, P.mp+15); hud(); save(); say("🔹 使用魔力水,回復 15 MP。");
 }
 
+// ---------- 提示訊息 ----------
+function toast(html) {
+  const el = document.createElement("div"); el.className = "toast"; el.innerHTML = html;
+  const box = $("toasts"); box.appendChild(el); while (box.children.length > 3) box.firstChild.remove();
+  setTimeout(() => el.remove(), 4200);
+}
+
+// ---------- 成就 ----------
+const totalKills = () => Object.values(G.kills).reduce((a, b) => a + b, 0);
+const ACH = [
+  { id:"k1",   n:"初陣",     d:"擊敗第一隻怪物",           ok:() => totalKills() >= 1,   r:{ g:50 } },
+  { id:"k100", n:"百戰老兵", d:"累計擊敗 100 隻怪物",      ok:() => totalKills() >= 100, r:{ pts:2 } },
+  { id:"k500", n:"千錘百鍊", d:"累計擊敗 500 隻怪物",      ok:() => totalKills() >= 500, r:{ pts:5 } },
+  { id:"lv10", n:"小有名氣", d:"達到 Lv 10",               ok:() => P.lv >= 10,          r:{ pts:2 } },
+  { id:"lv20", n:"傳說勇者", d:"達到 Lv 20",               ok:() => P.lv >= 20,          r:{ pts:4 } },
+  { id:"c3",   n:"旅人",     d:"擊敗 3 位章節守護者",      ok:() => G.cleared.filter(Boolean).length >= 3, r:{ g:300 } },
+  { id:"c6",   n:"屠魔者",   d:"擊敗魔王",                 ok:() => !!G.cleared[5],      r:{ pts:3 } },
+  { id:"c8",   n:"超越傳說", d:"擊敗虛空之主",             ok:() => !!G.ended,           r:{ pts:6 } },
+  { id:"sh",   n:"星之收藏家", d:"集齊 4 枚星之碎片",      ok:() => G.shards >= 4,       r:{ pts:2 } },
+  { id:"q",    n:"委託達人", d:"完成前 6 章的所有委託",    ok:() => [0,1,2,3,4,5].every(i => qDone(i,2)), r:{ pts:4 } },
+  { id:"enh",  n:"鍛造大師", d:"把一件裝備強化到 +10",     ok:() => Object.values(P.enh).some(v => v >= 10), r:{ pts:3 } },
+  { id:"epic", n:"史詩收藏", d:"擁有一件史詩裝備",         ok:() => P.owned.some(id => ITEMS[id] && ITEMS[id].rar === 3), r:{ pts:2 } },
+  { id:"rich", n:"富甲一方", d:"同時持有 10000 金幣",      ok:() => P.gold >= 10000,     r:{ ore:20 } },
+  { id:"gold", n:"黃金獵人", d:"打倒黃金史萊姆",           ok:() => (G.kills["黃金史萊姆"]||0) >= 1, r:{ pts:1 } },
+  { id:"st",   n:"連戰連勝", d:"達成 20 連勝",             ok:() => (G.bestStreak||0) >= 20, r:{ pts:2 } },
+  { id:"cp",   n:"最佳拍檔", d:"讓一位夥伴升到 Lv 15",     ok:() => Object.values(G.comps).some(c => c && c.lv >= 15), r:{ pts:3 } },
+  { id:"t10",  n:"塔下勇士", d:"試煉之塔抵達第 10 層",     ok:() => G.tower.best >= 10,  r:{ pts:2 } },
+  { id:"t30",  n:"塔中豪傑", d:"試煉之塔抵達第 30 層",     ok:() => G.tower.best >= 30,  r:{ pts:4 } },
+  { id:"t50",  n:"登塔之王", d:"試煉之塔抵達第 50 層",     ok:() => G.tower.best >= 50,  r:{ pts:6 } },
+];
+function checkAch() {
+  const got = ACH.filter(a => !G.ach[a.id] && a.ok());
+  got.forEach(a => { G.ach[a.id] = 1; toast(`🏆 成就達成:<b>${a.n}</b><br><small>${a.d} · 獎勵 ${rewardText(a.r)}</small>`); });
+  if (got.length) { hud(); save(); jingle([784,988,1175]); }
+}
+function openAch() {
+  const done = ACH.filter(a => G.ach[a.id]).length;
+  openModal(`<h2>🏆 成就 ${done}/${ACH.length}</h2>
+    ${ACH.map(a => `<div class="row" style="opacity:${G.ach[a.id] ? 1 : .55}"><span>${G.ach[a.id] ? "✅" : "⬜"} <b>${a.n}</b> <small>${a.d}</small></span><small>${Object.entries(a.r).map(([k,v]) => ({g:"💰",pts:"✨",ore:"🔩"}[k]||k)+v).join(" ")}</small></div>`).join("")}
+    <button style="margin-top:10px" onclick="closeModal()">關閉</button>`);
+}
+
+// ---------- 地圖隨機事件 ----------
+let merch = null;
+function cleanMerch() {
+  if (!merch) return;
+  merch.deals.forEach(d => { if (d.item && !d.sold) { delete G.gen[d.item.id]; delete ITEMS[d.item.id]; } });
+  merch = null;
+}
+function randomEvent() {
+  const ai = G.area, ev = ["spring","spring","spring","trap","trap","merchant","merchant","gambler","gambler","mimic","ore","ore"][rnd(0,11)];
+  if (ev === "spring") { P.hp = Math.min(P.mhp, P.hp + Math.round(P.mhp*.5)); P.mp = Math.min(P.mmp, P.mp + Math.round(P.mmp*.5)); hud(); beep(660,.12,"triangle"); say("⛲ 你發現了一處魔法泉水,喝了一口,HP / MP 回復了一半!"); }
+  else if (ev === "trap") { const d = Math.max(1, Math.round(P.mhp*(.06 + .01*ai))); P.hp = Math.max(1, P.hp - d); hud(); fx($("wrap"), "flash"); beep(140,.12,"sawtooth"); say(`🕳️ 踩到陷阱了!受到 ${d} 傷害。(小心點,別在殘血時亂走)`); }
+  else if (ev === "ore") { const n = rnd(3,8); P.ore += n; hud(); beep(880,.1,"triangle"); say(`⛏️ 你在路邊發現了一處礦脈,採到 🔩素材 x${n}!`); }
+  else if (ev === "merchant") openMerchant();
+  else if (ev === "gambler") openGambler();
+  else {
+    const b = A().e[0];
+    say("📦 前方的寶箱突然張開了大嘴——是寶箱怪!");
+    startBattle([mk({ n:"寶箱怪", i:"📦", hp:Math.round(b.hp*1.8), atk:Math.round(b.atk*1.2), xp:Math.round(b.xp*2.5), g:Math.round(b.g*3), sk:["bash","drain"], mimic:true })]);
+  }
+}
+function openMerchant() {
+  const ai = G.area, it = rollItem(ai + 1, false, true);
+  merch = { deals:[
+    { txt:"🧪 藥水 x3", price:35, give:() => P.potion += 3 },
+    { txt:"🔩 素材 x8", price:60*(ai+1), give:() => P.ore += 8 },
+    { item:it, price:Math.round(it.p*1.5), sold:false },
+  ] };
+  renderMerchant();
+}
+function renderMerchant() {
+  const rows = merch.deals.map((d,i) => {
+    if (d.item) { const it = d.item;
+      return `<div class="icard" style="margin-top:6px"><div class="ihead"><span class="iname" style="color:${RARITY[it.rar].c}">${itemIcon(it)} ${it.n}</span><span class="lvb">Lv ${itemLv(it)}</span></div>
+        <div class="chips">${statChips(it)}</div>${cmpChips(it) ? `<div class="cmp">較目前 ${cmpChips(it)}</div>` : ""}
+        <div class="iact"><button onclick="buyDeal(${i})" ${d.sold || P.gold<d.price ? "disabled" : ""}>${d.sold ? "已售出" : "💰 "+d.price}</button></div></div>`; }
+    return `<div class="row"><span>${d.txt}</span><button onclick="buyDeal(${i})" ${d.sold || P.gold<d.price ? "disabled" : ""}>${d.sold ? "已售出" : "💰 "+d.price}</button></div>`;
+  }).join("");
+  openModal(`<h2>🧙 神秘商人 · 💰 ${P.gold}</h2><div style="opacity:.8;margin-bottom:6px">「嘿嘿,只有今天,離開了就沒有囉。」</div>${rows}
+    <button style="margin-top:12px" onclick="closeModal()">離開</button>`);
+}
+function buyDeal(i) {
+  const d = merch.deals[i]; if (d.sold || P.gold < d.price) return;
+  if (d.item && bagCount() >= 40) return say("背包已滿(40 件),先整理一下吧。");
+  P.gold -= d.price; d.sold = true;
+  if (d.item) P.owned.push(d.item.id); else d.give();
+  hud(); save(); beep(520,.08,"triangle"); renderMerchant();
+}
+function openGambler(msg) {
+  const k = G.area + 1, bets = [30*k, 100*k, 300*k];
+  openModal(`<h2>🎲 流浪賭徒 · 💰 ${P.gold}</h2>
+    <div style="opacity:.8;margin-bottom:8px">「猜大小,贏了賠雙倍,輸了就沒收——敢不敢賭一把?」</div>
+    ${msg ? `<div class="row"><b>${msg}</b></div>` : ""}
+    <div class="seg">${bets.map(b => `<button onclick="gamble(${b})" ${P.gold<b ? "disabled" : ""}>賭 💰${b}</button>`).join("")}</div>
+    <button style="margin-top:10px" onclick="closeModal()">離開</button>`);
+}
+function gamble(b) {
+  if (P.gold < b) return;
+  let msg;
+  if (Math.random() < .46) { P.gold += b; msg = `🎉 你贏了!+${b} 金幣`; beep(880,.12,"triangle"); }
+  else { P.gold -= b; msg = `💸 你輸了……-${b} 金幣`; beep(160,.15,"sawtooth"); }
+  hud(); save(); openGambler(msg);
+}
+
+// ---------- 試煉之塔 ----------
+let tw = null;   // { floor, won }
+const towerPool = n => Math.min(7, Math.floor((n-1)/6));
+function towerFoes(n) {
+  const ai = towerPool(n), pool = AREAS[ai].e, s = n > 48 ? 1 + (n-48)*.07 : 1;
+  const scale = f => { f.tower = true; f.tier = ai; f.hp = f.mhp = Math.round(f.hp*s); f.atk = Math.round(f.atk*s);
+    f.xp = Math.round(f.xp*(1 + n*.02)); f.g = Math.round(f.g*(1 + n*.02)); return f; };
+  if (n % 10 === 0) { const b = scale(mk(AREAS[ai].boss)); b.n = "塔・" + b.n; return [b]; }
+  const cnt = rnd(1, Math.min(3, 1 + Math.floor(n/10)));
+  return Array.from({ length:cnt }, () => scale(mk(pool[rnd(0, pool.length-1)], Math.random() < .08)));
+}
+function openTower() {
+  if (inBattle) return;
+  const best = G.tower.best, cps = Array.from({ length:Math.floor(best/5) + 1 }, (_, k) => k*5 + 1);
+  openModal(`<h2>🗼 試煉之塔</h2>
+    <div style="line-height:1.6;opacity:.9">一層接一層的連戰,沒有盡頭。越往上敵人越強,每 10 層有一位頭目。<br>
+    · 每層通關給 🔩素材,有機會掉裝備(越高層品階越高)<br>· 每 5 層是安全層,HP / MP 全部回復<br>· 每 10 層通關有稀有以上裝備與 ✨能力點<br>· 倒下不會損失金幣,只是挑戰結束</div>
+    <div class="row"><span>🏅 最高紀錄</span><b>第 ${best} 層</b></div>
+    <div style="opacity:.8;margin:8px 0 4px">選擇起點:</div>
+    <div class="seg" style="flex-wrap:wrap">${cps.slice(-8).map(f => `<button onclick="startTower(${f})">第 ${f} 層${f>1 ? "<br><small>建議 Lv "+LV_REQ[towerPool(f)]+"+</small>" : ""}</button>`).join("")}</div>
+    <button style="margin-top:12px" onclick="closeModal()">離開</button>`);
+}
+function startTower(f) { closeModal(); tw = { floor:f, won:false }; startTowerFloor(); }
+function startTowerFloor() {
+  startBattle(towerFoes(tw.floor));
+  $("blog").innerHTML = `🗼 <b>第 ${tw.floor} 層</b><br>` + $("blog").innerHTML; hud();
+}
+function towerAfter(msg) {
+  if (!tw.won) { tw = null; hud(); return; }   // 逃跑 = 離開
+  tw.won = false;
+  const n = tw.floor, ai = towerPool(n);
+  G.tower.best = Math.max(G.tower.best, n);
+  const ore = 1 + Math.floor(n/5); P.ore += ore;
+  let extra = `<br>🗼 第 ${n} 層通關!🔩素材 +${ore}`;
+  if (n % 10 === 0) { extra += dropItem(rollItem(ai + 1, false, true)); P.pts += 1; extra += "<br>✨ 頭目層里程碑:能力點 +1"; }
+  if (n % 5 === 0) { P.hp = P.mhp; P.mp = P.mmp; extra += "<br>💚 安全層:HP / MP 全部回復!"; }
+  else { P.hp = Math.min(P.mhp, P.hp + Math.round(P.mhp*.1)); P.mp = Math.min(P.mmp, P.mp + Math.round(P.mmp*.1)); extra += "<br>(休息片刻,回復 10% HP / MP)"; }
+  hud(); save(); checkAch();
+  openModal(`<h2>🗼 第 ${n} 層 通過!</h2><div style="line-height:1.55">${msg}${extra}</div>
+    <div style="display:flex;gap:8px;margin-top:12px"><button style="flex:1" onclick="towerNext()">挑戰第 ${n+1} 層</button><button onclick="towerLeave()">離開試煉之塔</button></div>`);
+}
+function towerNext() { tw.floor++; closeModal(); startTowerFloor(); }
+function towerLeave() { tw = null; closeModal(); hud(); say(`你離開了試煉之塔。最高紀錄:第 ${G.tower.best} 層。`); }
+const towerModalOpen = () => tw && !foes.length && $("modal").style.display === "flex";
+
 // ---------- 輸入 ----------
 const KEYS = { ArrowUp:[0,-1], w:[0,-1], ArrowDown:[0,1], s:[0,1], ArrowLeft:[-1,0], a:[-1,0], ArrowRight:[1,0], d:[1,0] };
 addEventListener("keydown", e => {
-  if (!P.cls) return;
+  if (!P.cls || towerModalOpen()) return;
   if (e.key==="p"||e.key==="P") return usePotion();
   if (e.key==="e"||e.key==="E") return useEther();
   if ((e.key==="i"||e.key==="I") && ($("modal").style.display==="flex" || !inBattle)) return $("modal").style.display==="flex" ? closeModal() : openEquip();
   if ((e.key==="b"||e.key==="B") && ($("modal").style.display==="flex" || !inBattle)) return $("modal").style.display==="flex" ? closeModal() : openCodex();
+  if ((e.key==="v"||e.key==="V") && ($("modal").style.display==="flex" || !inBattle)) return $("modal").style.display==="flex" ? closeModal() : openAch();
+  if ((e.key==="t"||e.key==="T") && !inBattle) return openTower();
+  if (e.key==="Escape" && $("modal").style.display==="flex" && !foes.length) return closeModal();
   if (e.key==="c"||e.key==="C") return $("modal").style.display==="flex" ? closeModal() : openStats();
   const d = KEYS[e.key] || KEYS[e.key.toLowerCase?.()];
   if (d) { e.preventDefault(); move(...d); }
