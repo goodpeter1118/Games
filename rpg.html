@@ -277,9 +277,9 @@ function advTab() {
     + (next.length ? `<div style="opacity:.75;margin:8px 0 2px;font-size:13px">${(P.adv || []).length === 0 ? "選擇一條轉職路線(轉職後無法更改,職業路線決定你的後續技能與被動)" : "你已經轉職,達成條件後可以再覺醒一次"}</div>${next.map(card).join("")}`
       : `<div class="row"><span>🌟 你已達到最終型態,沒有更高的職業了。</span></div>`);
 }
-function advance(id) {
+function advance(id, ok) {
   const a = ADV[id]; if (!a || !advNext().includes(a) || !advReqs(a).every(r => r[0])) return;
-  if (a.tier === 1 && !confirm(`確定要轉職為「${a.n}」嗎?轉職後無法更改,並會花費 💰${a.req.gold}。`)) return;
+  if (a.tier === 1 && !ok) return askConfirm(`確定要轉職為 <b>${a.i} ${a.n}</b> 嗎?<br>轉職後<b>無法更改</b>,並會花費 💰${a.req.gold}。`, () => advance(id, true), () => openStats(true), "轉職");
   P.gold -= a.req.gold; P.adv = (P.adv || []).concat(id);
   const b = a.b || {}; P.advStat = P.advStat || {};
   ["hp","mp","atk","def"].forEach(k => P.advStat[k] = (P.advStat[k] || 0) + (b[k] || 0));
@@ -537,9 +537,10 @@ function load() {
     applyState(); return true; } catch(e) { return false; }
 }
 function newGame() {
-  if (!confirm("確定要放棄目前進度,重新開始嗎?")) return;
-  try { localStorage.removeItem(SAVE); } catch(e) {}
-  location.reload();
+  askConfirm("確定要放棄目前進度,重新開始嗎?<br>所有進度都會被清除。", () => {
+    try { localStorage.removeItem(SAVE); } catch(e) {}
+    location.reload();
+  }, () => openStats(true), "重新開始");
 }
 
 // ---------- HUD / 繪製 ----------
@@ -1062,10 +1063,11 @@ function salvageItem(id) { const it = ITEMS[id]; if (!it || enhOf(id)) return; P
 function bulkSalvage(maxRar) {   // 一次分解背包裡的普通/優良隨機裝備(穿著中和已強化的不會動)
   const eqIds = Object.values(P.eq);
   const list = P.owned.map(id => ITEMS[id]).filter(it => it && it.gen && it.rar <= maxRar && !eqIds.includes(it.id) && !enhOf(it.id));
-  if (!list.length) return say("背包裡沒有可分解的裝備。");
+  if (!list.length) return toast("背包裡沒有可分解的裝備。");
   const ore = list.reduce((n, it) => n + salvageValue(it), 0);
-  if (!confirm(`分解 ${list.length} 件${RARITY[maxRar].n}以下的隨機裝備,獲得 🔩${ore}?`)) return;
-  list.forEach(it => removeItem(it.id)); P.ore += ore; hud(); save(); beep(400,.08,"triangle"); openEquip();
+  askConfirm(`分解 ${list.length} 件${RARITY[maxRar].n}以下的隨機裝備,獲得 🔩${ore}?<br><small>穿著中和已強化的裝備不會被分解。</small>`, () => {
+    list.forEach(it => removeItem(it.id)); P.ore += ore; hud(); save(); beep(400,.08,"triangle"); openEquip();
+  }, () => openEquip(), "分解");
 }
 function openShop() {
   const stock = ITEMLIST.filter(it => !it.drop && it.t <= G.area && (!it.cls || it.cls === P.cls) && it.slot === shopTab).sort((x,y) => itemLv(x) - itemLv(y) || x.p - y.p);
@@ -1210,6 +1212,14 @@ function useEther() {
 }
 
 // ---------- 提示訊息 ----------
+let _yes = null, _no = null;
+function askConfirm(html, yes, no, label) {   // 遊戲內確認視窗:不依賴瀏覽器 confirm()
+  _yes = yes; _no = no || null;
+  openModal(`<h2>確認</h2><div style="line-height:1.6">${html}</div>
+    <div style="display:flex;gap:8px;margin-top:14px"><button style="flex:1" onclick="confirmYes()">${label || "確定"}</button><button style="flex:1" onclick="confirmNo()">取消</button></div>`);
+}
+function confirmYes() { const f = _yes; _yes = _no = null; closeModal(); if (f) f(); }
+function confirmNo() { const f = _no; _yes = _no = null; closeModal(); if (f) f(); }
 function toast(html) {
   const el = document.createElement("div"); el.className = "toast"; el.innerHTML = html;
   const box = $("toasts"); box.appendChild(el); while (box.children.length > 3) box.firstChild.remove();
