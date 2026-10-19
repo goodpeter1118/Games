@@ -40,6 +40,29 @@
   .seg { display:flex; gap:6px; margin:6px 0; }
   .seg button { flex:1; padding:7px 4px; font-size:14px; }
   .seg button.on { border-color:var(--xp); background:#2a2f45; }
+  .tabs { display:flex; gap:6px; margin:8px 0; }
+  .tabs button { flex:1; padding:8px 4px; font-size:14px; }
+  .tabs button.on { border-color:var(--xp); background:#2a2f45; }
+  .igrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:8px; }
+  .icard { border:1px solid var(--line); border-radius:10px; padding:8px 10px; background:#161a28; display:flex; flex-direction:column; gap:6px; }
+  .icard.on { border-color:var(--xp); background:#1d2132; }
+  .ihead { display:flex; justify-content:space-between; align-items:center; gap:6px; }
+  .iname { font-weight:600; font-size:14px; }
+  .lvb { font-size:12px; border:1px solid var(--line); border-radius:6px; padding:1px 6px; white-space:nowrap; }
+  .lvb.bad { border-color:#e5484d; color:#ff8a8f; }
+  .chips { display:flex; flex-wrap:wrap; gap:4px; }
+  .chip { font-size:12px; background:#2a3048; border-radius:6px; padding:2px 7px; white-space:nowrap; }
+  .chip.enh { background:#4a3d1c; }
+  .chip.up { color:#6fdc8c; } .chip.down { color:#ff7b7b; }
+  .cmp { font-size:12px; opacity:.95; display:flex; gap:4px; flex-wrap:wrap; align-items:center; }
+  .iact { display:flex; gap:6px; flex-wrap:wrap; }
+  .iact button { padding:5px 9px; font-size:13px; }
+  .sumbar { display:flex; flex-wrap:wrap; gap:5px; margin:6px 0; }
+  .sumbar .chip { background:#232944; font-size:13px; }
+  .slots { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin:6px 0; }
+  .slot { border:1px solid var(--line); border-radius:8px; padding:6px 8px; font-size:12px; background:#161a28; cursor:pointer; }
+  .slot.on { border-color:var(--xp); }
+  .slot b { display:block; font-size:13px; margin-top:2px; }
   .card { text-align:left; width:100%; margin-top:8px; }
   .card small { display:block; opacity:.75; margin-top:2px; }
   button { background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:10px;
@@ -245,9 +268,10 @@ const AREAS = [
 const BLOCK = new Set(["#","~","F","N","M"]);
 // ---------- 裝備 ----------
 // 欄位:atk/def 主屬性 · hp/mp 上限 · crit 暴擊 · dodge 閃避 · sp 技能威力 · steal 吸血 · p 價格 · t 商店解鎖章節 · drop 頭目掉落(不賣)
+const LV_REQ = [1,2,5,8,11,14,17,20];   // 各品階裝備的需求等級
 const ITEMLIST = [];
-const wp = (cls, rows) => rows.forEach(([n,atk,p,t,fx]) => ITEMLIST.push({ id:`w_${cls}_${atk}`, slot:"weapon", cls, n, atk, p, t, ...fx }));
-const ar = (cls, rows) => rows.forEach(([n,def,p,t,fx]) => ITEMLIST.push({ id:`a_${cls}_${def}`, slot:"armor", cls, n, def, p, t, ...fx }));
+const wp = (cls, rows) => rows.forEach(([n,atk,p,t,fx]) => ITEMLIST.push({ id:`w_${cls}_${atk}`, slot:"weapon", cls, n, atk, p, t, lv:LV_REQ[t], ...fx }));
+const ar = (cls, rows) => rows.forEach(([n,def,p,t,fx]) => ITEMLIST.push({ id:`a_${cls}_${def}`, slot:"armor", cls, n, def, p, t, lv:LV_REQ[t], ...fx }));
 wp("war", [["木劍",3,30,0],["鐵劍",6,90,0],["戰斧",8,160,1,{crit:.04}],["鋼劍",10,220,2],["秘銀巨劍",13,350,3,{steal:.05}],
            ["聖劍",16,500,4,{crit:.05}],["遠古之劍",19,650,6,{steal:.06}],["星辰神劍",23,950,7,{crit:.08,steal:.05}]]);
 wp("mage",[["學徒木杖",3,30,0],["水晶杖",6,90,0,{mp:4}],["冰霜法杖",8,160,1,{mp:6}],["奧術法杖",10,220,2,{sp:.05}],["秘銀魔杖",13,350,3,{mp:10}],
@@ -263,12 +287,12 @@ ar("rogue",[["皮衣",2,35,0],["輕革甲",3,95,1,{dodge:.02}],["暗影斗篷",5
 [ ["a_ring","力量戒指","💍",60,0,{atk:2}], ["a_amulet","生命護符","📿",80,0,{hp:15}], ["a_charm","魔力吊墜","🧿",80,0,{mp:8}],
   ["a_boots","疾風靴","👢",150,1,{dodge:.05}], ["a_badge","守護徽章","🎖️",250,2,{def:3}], ["a_eye","鷹眼戒指","👁️",200,2,{crit:.06}],
   ["a_fang","吸血獠牙","🦷",300,3,{steal:.06}], ["a_crown","賢者之冠","👑",500,4,{sp:.08,mp:8}],
-].forEach(([id,n,i,p,t,fx]) => ITEMLIST.push({ id, slot:"acc", n, i, p, t, ...fx }));
+].forEach(([id,n,i,p,t,fx]) => ITEMLIST.push({ id, slot:"acc", n, i, p, t, lv:LV_REQ[t], ...fx }));
 // 頭目專屬掉落(只能打倒頭目取得)
 [ ["d_slime","史萊姆黏液戒","🟢",{hp:10,def:1}], ["d_web","蛛絲手環","🕸️",{dodge:.06,crit:.03}], ["d_sand","沙漠之心","❤️‍🔥",{atk:3,hp:20}],
   ["d_ice","冰龍之牙","🧊",{crit:.08,steal:.04}], ["d_belt","巨人腰帶","🪢",{hp:40,def:3}], ["d_horn","魔王之角","🦄",{atk:5,sp:.1,crit:.05}],
   ["d_heart","龍心","💎",{hp:60,atk:5,steal:.06}], ["d_void","星辰王冠","🌌",{atk:6,def:4,crit:.08,dodge:.05,sp:.1}],
-].forEach(([id,n,i,fx]) => ITEMLIST.push({ id, slot:"acc", n, i, p:0, t:0, drop:true, ...fx }));
+].forEach(([id,n,i,fx], k) => ITEMLIST.push({ id, slot:"acc", n, i, p:0, t:0, drop:true, lv:[1,4,7,10,13,16,18,20][k], ...fx }));
 const ITEMS = Object.fromEntries(ITEMLIST.map(it => [it.id, it]));
 const SLOTS = { weapon:"武器", armor:"防具", acc:"飾品" };
 const itemIcon = it => it.i || ({ weapon:{war:"🗡️",mage:"🪄",rogue:"🏹"}, armor:{war:"🛡️",mage:"👘",rogue:"🥋"} }[it.slot][it.cls]);
@@ -295,7 +319,7 @@ function rollItem(tier, elite, rare) {
   for (let i=0;i<4;i++) { acc += w[i]; if (r <= acc) { ri = i; break; } }
   const q = Math.random(), slot = q < .35 ? "weapon" : q < .7 ? "armor" : "acc";
   if (slot === "acc" && ri === 0) ri = 1;
-  const id = "g" + (++G.genSeq), it = { id, gen:true, slot, rar:ri, t };
+  const id = "g" + (++G.genSeq), it = { id, gen:true, slot, rar:ri, t, lv:Math.max(1, LV_REQ[t] + (t ? rnd(-1,1) : 0)) };
   if (slot === "acc") { const [n,i] = ACC_NAMES[rnd(0, ACC_NAMES.length-1)]; it.n = `[${RARITY[ri].n}] ${n}`; it.i = i; }
   else {
     const bases = ITEMLIST.filter(x => x.cls === P.cls && x.slot === slot && !x.drop && x.t <= t);
@@ -308,13 +332,14 @@ function rollItem(tier, elite, rare) {
   G.gen[id] = it; ITEMS[id] = it;
   return it;
 }
+const itemLv = it => it.lv || LV_REQ[it.t || 0] || 1;
 const bagCount = () => P.owned.filter(id => !Object.values(P.eq).includes(id)).length;
 const sellValue = it => it.p ? Math.round(it.p*.5) : 5;
 const salvageValue = it => 1 + (it.rar||0)*2 + (it.t||0);
 function dropItem(it) {   // 背包滿了(40 件)就自動賣掉
   if (bagCount() >= 40) { const g = sellValue(it); P.gold += g; delete G.gen[it.id]; delete ITEMS[it.id]; return ` 💰背包已滿,自動賣出 ${it.n}(+${g})`; }
   P.owned.push(it.id);
-  return `<br>🎁 掉落 <b style="color:${RARITY[it.rar].c}">${itemIcon(it)} ${it.n}</b>(${descItem(it)})!`;
+  return `<br>🎁 掉落 <b style="color:${RARITY[it.rar].c}">${itemIcon(it)} ${it.n}</b>(${descItem(it)})!<small>需求 Lv ${itemLv(it)}</small>`;
 }
 function removeItem(id) { P.owned = P.owned.filter(x => x !== id); if (G.gen[id]) { delete G.gen[id]; delete ITEMS[id]; } }
 const critRate = () => Math.min(.75, CL().crit + eqf("crit"));
@@ -815,7 +840,7 @@ function rewardOne(f) {
     P.pts += 2; msg += `<br>🎁 能力點 +2。`;
     const dr = ITEMS[a.boss.drop];
     if (dr && !P.owned.includes(dr.id)) {
-      P.owned.push(dr.id); if (!P.eq.acc) equip(dr.id);
+      P.owned.push(dr.id); if (!P.eq.acc && P.lv >= itemLv(dr)) equip(dr.id);
       msg += `<br>✨ 獲得頭目專屬飾品 <b>${itemIcon(dr)} ${dr.n}</b>(${descItem(dr)})!`;
     }
     if (a.last) {
@@ -874,35 +899,52 @@ function startGame(k) {
 }
 
 const effv = (it, k) => it ? (it[k]||0) + (it.slot==="weapon" && k==="atk" ? enhOf(it.id)*2 : 0) + (it.slot==="armor" && k==="def" ? enhOf(it.id) : 0) : 0;
-function cmpText(it) {
+const CHIPS = { atk:"⚔️ 攻擊", def:"🛡️ 防禦", hp:"❤️ HP", mp:"🔷 MP", crit:"🎯 暴擊", dodge:"💨 閃避", sp:"✨ 技能威力", steal:"🦷 吸血" };
+const chipVal = (k, v) => FXN[k][1] ? Math.round(v*1000)/10 + "%" : v;
+const statChips = it => Object.keys(CHIPS).filter(k => it[k]).map(k => `<span class="chip">${CHIPS[k]} +${chipVal(k, it[k])}</span>`).join("");
+function cmpChips(it) {
   const cur = ITEMS[P.eq[it.slot]]; if (!cur || cur.id === it.id) return "";
-  return Object.keys(FXN).map(k => {
+  return Object.keys(CHIPS).map(k => {
     const d = effv(it,k) - effv(cur,k); if (!d) return "";
-    const v = FXN[k][1] ? Math.round(Math.abs(d)*1000)/10 + "%" : Math.abs(d);
-    return `<span style="color:${d>0 ? "#6fdc8c" : "#ff7b7b"}">${FXN[k][0]}${d>0 ? "▲" : "▼"}${v}</span>`;
-  }).filter(Boolean).join(" ");
+    return `<span class="chip ${d>0 ? "up" : "down"}">${CHIPS[k].split(" ")[1]} ${d>0 ? "▲" : "▼"}${chipVal(k, Math.abs(d))}</span>`;
+  }).join("");
 }
-function itemRow(it, shop) {
-  const owned = P.owned.includes(it.id), on = P.eq[it.slot] === it.id, lv = enhOf(it.id);
-  const btn = on ? `<button disabled>裝備中</button>`
-    : owned ? `<button onclick="equipItem('${it.id}',${shop})">裝備</button>`
-    : `<button onclick="buyItem('${it.id}')" ${P.gold<it.p?"disabled":""}>💰${it.p}</button>`;
-  const extra = !shop && owned && !on && !it.drop
-    ? `<button onclick="sellItem('${it.id}')" ${lv?"disabled":""}>賣 💰${sellValue(it)}</button><button onclick="salvageItem('${it.id}')" ${lv?"disabled":""}>分解 🔩${salvageValue(it)}</button>` : "";
-  const cmp = on ? "" : cmpText(it);
-  return `<div class="row" style="align-items:flex-start"><span style="color:${it.gen ? RARITY[it.rar].c : "inherit"}">${itemIcon(it)} ${it.n}${lv ? " +"+lv : ""}
-    <small style="color:var(--text)">${descItem(it)}${lv ? " · 強化 "+(it.slot==="weapon" ? "攻擊+"+lv*2 : "防禦+"+lv) : ""}</small>${cmp ? `<br><small>相較目前:${cmp}</small>` : ""}</span>
-    <span style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">${btn}${extra}</span></div>`;
+let shopTab = "weapon", eqTab = "weapon";
+function itemCard(it, mode) {
+  const owned = P.owned.includes(it.id), on = P.eq[it.slot] === it.id, lv = enhOf(it.id), need = itemLv(it), ok = P.lv >= need;
+  const cmp = on ? "" : cmpChips(it);
+  let btns = on ? `<button disabled>裝備中</button>`
+    : owned ? `<button ${ok ? "" : "disabled"} onclick="equipItem('${it.id}','${mode}')">${ok ? "裝備" : "需 Lv "+need}</button>`
+    : `<button ${P.gold<it.p ? "disabled" : ""} onclick="buyItem('${it.id}')">💰 ${it.p}</button>`;
+  if (mode === "bag" && owned && !on && !it.drop)
+    btns += `<button onclick="sellItem('${it.id}')" ${lv?"disabled":""}>賣 💰${sellValue(it)}</button><button onclick="salvageItem('${it.id}')" ${lv?"disabled":""}>分解 🔩${salvageValue(it)}</button>`;
+  return `<div class="icard ${on ? "on" : ""}">
+    <div class="ihead"><span class="iname" style="color:${it.gen ? RARITY[it.rar].c : "var(--text)"}">${itemIcon(it)} ${it.n}${lv ? ` <small>+${lv}</small>` : ""}</span><span class="lvb ${ok ? "" : "bad"}">Lv ${need}</span></div>
+    <div class="chips">${statChips(it)}${lv ? `<span class="chip enh">🔨 強化 ${it.slot==="weapon" ? "⚔️+"+lv*2 : "🛡️+"+lv}</span>` : ""}</div>
+    ${cmp ? `<div class="cmp">較目前 ${cmp}</div>` : ""}
+    <div class="iact">${btns}</div></div>`;
 }
+const tabBar = (cur, fn, counts) => `<div class="tabs">${Object.entries(SLOTS).map(([k,n]) => `<button class="${k===cur ? "on" : ""}" onclick="${fn}('${k}')">${n}${counts ? " ("+counts[k]+")" : ""}</button>`).join("")}</div>`;
+const setShopTab = k => { shopTab = k; openShop(); };
+const setEqTab = k => { eqTab = k; openEquip(); };
 function sellItem(id) { const it = ITEMS[id]; if (!it || enhOf(id)) return; P.gold += sellValue(it); removeItem(id); hud(); save(); beep(520,.06,"triangle"); openEquip(); }
 function salvageItem(id) { const it = ITEMS[id]; if (!it || enhOf(id)) return; P.ore += salvageValue(it); removeItem(id); hud(); save(); beep(400,.06,"triangle"); openEquip(); }
+function bulkSalvage(maxRar) {   // 一次分解背包裡的普通/優良隨機裝備(穿著中和已強化的不會動)
+  const eqIds = Object.values(P.eq);
+  const list = P.owned.map(id => ITEMS[id]).filter(it => it && it.gen && it.rar <= maxRar && !eqIds.includes(it.id) && !enhOf(it.id));
+  if (!list.length) return say("背包裡沒有可分解的裝備。");
+  const ore = list.reduce((n, it) => n + salvageValue(it), 0);
+  if (!confirm(`分解 ${list.length} 件${RARITY[maxRar].n}以下的隨機裝備,獲得 🔩${ore}?`)) return;
+  list.forEach(it => removeItem(it.id)); P.ore += ore; hud(); save(); beep(400,.08,"triangle"); openEquip();
+}
 function openShop() {
-  const stock = ITEMLIST.filter(it => !it.drop && it.t <= G.area && (!it.cls || it.cls === P.cls));
-  const sec = sl => `<h2 style="margin-top:10px">${SLOTS[sl]}${sl==="acc"?"(全職業通用)":"(" + CL().n + "專用)"}</h2>` + stock.filter(i => i.slot === sl).map(i => itemRow(i, true)).join("");
-  openModal(`<h2>🏪 商店 · 💰 ${P.gold}</h2>
-    <div class="row"><span>🧪 藥水(回 25 HP)</span><button onclick="buy('potion')" ${P.gold<15?"disabled":""}>💰15</button></div>
-    <div class="row"><span>🔹 魔力水(回 15 MP)</span><button onclick="buy('ether')" ${P.gold<25?"disabled":""}>💰25</button></div>
-    ${sec("weapon")}${sec("armor")}${sec("acc")}
+  const stock = ITEMLIST.filter(it => !it.drop && it.t <= G.area && (!it.cls || it.cls === P.cls) && it.slot === shopTab).sort((x,y) => itemLv(x) - itemLv(y) || x.p - y.p);
+  openModal(`<h2>🏪 商店 · 💰 ${P.gold} · 🔩 ${P.ore}</h2>
+    <div class="row"><span>🧪 藥水 <small>回 25 HP</small></span><button onclick="buy('potion')" ${P.gold<15?"disabled":""}>💰 15</button></div>
+    <div class="row"><span>🔹 魔力水 <small>回 15 MP</small></span><button onclick="buy('ether')" ${P.gold<25?"disabled":""}>💰 25</button></div>
+    ${tabBar(shopTab, "setShopTab")}
+    <div style="font-size:12px;opacity:.7;margin-bottom:6px">${shopTab==="acc" ? "全職業通用" : CL().n + "專用"} · 更強的裝備會隨章節解鎖 · 需求等級不足時買得到,但要升級才能穿</div>
+    <div class="igrid">${stock.map(it => itemCard(it, "shop")).join("")}</div>
     <button style="margin-top:10px" onclick="closeModal()">離開</button>`);
 }
 function buy(kind) {
@@ -913,11 +955,14 @@ function buy(kind) {
 function buyItem(id) {
   const it = ITEMS[id]; if (P.gold < it.p || P.owned.includes(id)) return;
   P.gold -= it.p; P.owned.push(id);
-  const cur = ITEMS[P.eq[it.slot]];   // 比較好的裝備直接穿上
-  if (!cur || (it.slot==="weapon" && it.atk > cur.atk) || (it.slot==="armor" && it.def > cur.def)) equip(id);
+  const cur = ITEMS[P.eq[it.slot]];   // 比較好而且等級夠的裝備直接穿上
+  if (P.lv >= itemLv(it) && (!cur || (it.slot==="weapon" && it.atk > cur.atk) || (it.slot==="armor" && it.def > cur.def))) equip(id);
   hud(); save(); beep(520,.08,"triangle"); openShop();
 }
-function equipItem(id, shop) { equip(id); hud(); save(); beep(440,.06,"triangle"); shop ? openShop() : openEquip(); }
+function equipItem(id, mode) {
+  const it = ITEMS[id]; if (P.lv < itemLv(it)) return say(`等級不足,需要 Lv ${itemLv(it)}。`);
+  equip(id); hud(); save(); beep(440,.06,"triangle"); mode === "shop" ? openShop() : openEquip();
+}
 const enhCost = id => { const lv = enhOf(id); return { g:Math.round(40*(lv+1)*(1+ITEMS[id].t*.5)), ore:lv+2 }; };
 function enhance(id) {
   const lv = enhOf(id); if (lv >= 10) return;
@@ -925,19 +970,31 @@ function enhance(id) {
   P.gold -= c.g; P.ore -= c.ore; P.enh[id] = lv + 1; hud(); save(); jingle([523,659]); openEquip();
 }
 function openEquip() {
-  const enhRow = sl => { const id = P.eq[sl]; if (!id || sl === "acc") return "";
-    const lv = enhOf(id), c = enhCost(id);
-    return `<div class="row"><span>🔨 強化 ${ITEMS[id].n} <small>+${lv} → ${lv>=10?"已滿級":"+"+(lv+1)}</small></span>`
-      + (lv >= 10 ? `<button disabled>已滿級</button>` : `<button onclick="enhance('${id}')" ${P.gold<c.g||P.ore<c.ore?"disabled":""}>💰${c.g} 🔩${c.ore}</button>`) + `</div>`; };
-  const mine = sl => P.owned.map(id => ITEMS[id]).filter(it => it.slot === sl && (!it.cls || it.cls === P.cls))
-    .sort((x,y) => ((y.rar||0)-(x.rar||0)) || ((y.atk||y.def||0)-(x.atk||x.def||0)));
-  const sec = sl => `<h2 style="margin-top:10px">${SLOTS[sl]}:${P.eq[sl] ? itemIcon(ITEMS[P.eq[sl]]) + " " + eqName(sl) : eqName(sl)}</h2>`
-    + enhRow(sl) + (mine(sl).map(it => itemRow(it, false)).join("") || `<div class="row"><span style="opacity:.6">還沒有${SLOTS[sl]}</span></div>`);
-  openModal(`<h2>🎒 裝備 · ${CL().i} ${CL().n} · 🔩素材 ${P.ore} · 💰 ${P.gold}</h2>
-    <div class="row"><span>⚔️ ${tAtk()} · 🛡️ ${tDef()}</span><span>暴擊 ${Math.round(critRate()*100)}% · 閃避 ${Math.round(dodgeRate()*100)}%${eqf("sp")?" · 技能威力 +"+Math.round(eqf("sp")*100)+"%":""}${eqf("steal")?" · 吸血 "+Math.round(eqf("steal")*100)+"%":""}</span></div>
-    ${sec("weapon")}${sec("armor")}${sec("acc")}
+  const eqIds = Object.values(P.eq);
+  const mine = sl => P.owned.map(id => ITEMS[id]).filter(it => it && it.slot === sl && (!it.cls || it.cls === P.cls))
+    .sort((x,y) => (eqIds.includes(y.id) - eqIds.includes(x.id)) || ((y.rar||0)-(x.rar||0)) || (itemLv(y) - itemLv(x)));
+  const counts = { weapon:mine("weapon").length, armor:mine("armor").length, acc:mine("acc").length };
+  const bag = bagCount();
+  const cid = P.eq[eqTab], cit = ITEMS[cid];
+  const enh = cit && eqTab !== "acc" ? (() => { const lv = enhOf(cid), c = enhCost(cid);
+    return `<div class="icard" style="margin-bottom:8px"><div class="ihead"><span class="iname">🔨 強化 ${cit.n}</span><span class="lvb">+${lv} → ${lv>=10 ? "滿級" : "+"+(lv+1)}</span></div>
+      <div class="chips"><span class="chip">${eqTab==="weapon" ? "每級 ⚔️ 攻擊 +2" : "每級 🛡️ 防禦 +1"}</span><span class="chip">素材 🔩 ${P.ore}</span></div>
+      <div class="iact">${lv >= 10 ? `<button disabled>已滿級</button>` : `<button onclick="enhance('${cid}')" ${P.gold<c.g||P.ore<c.ore ? "disabled" : ""}>強化 💰${c.g} 🔩${c.ore}</button>`}</div></div>`; })() : "";
+  const sumChips = [`<span class="chip">⚔️ 攻擊 ${tAtk()}</span>`, `<span class="chip">🛡️ 防禦 ${tDef()}</span>`, `<span class="chip">🎯 暴擊 ${Math.round(critRate()*100)}%</span>`, `<span class="chip">💨 閃避 ${Math.round(dodgeRate()*100)}%</span>`,
+    eqf("sp") ? `<span class="chip">✨ 技能威力 +${Math.round(eqf("sp")*100)}%</span>` : "", eqf("steal") ? `<span class="chip">🦷 吸血 ${Math.round(eqf("steal")*100)}%</span>` : ""].join("");
+  const slotCard = sl => { const it = ITEMS[P.eq[sl]];
+    return `<div class="slot ${sl===eqTab ? "on" : ""}" onclick="setEqTab('${sl}')">${SLOTS[sl]}<b style="color:${it && it.gen ? RARITY[it.rar].c : "var(--text)"}">${it ? itemIcon(it)+" "+it.n+(enhOf(it.id) ? " +"+enhOf(it.id) : "") : "— 空 —"}</b></div>`; };
+  openModal(`<h2>🎒 裝備 · ${CL().i} ${CL().n} Lv ${P.lv} · 💰 ${P.gold} · 🔩 ${P.ore}</h2>
+    <div class="sumbar">${sumChips}</div>
+    <div class="slots">${slotCard("weapon")}${slotCard("armor")}${slotCard("acc")}</div>
+    ${tabBar(eqTab, "setEqTab", counts)}
+    ${enh}
+    <div class="igrid">${mine(eqTab).map(it => itemCard(it, "bag")).join("") || `<div style="opacity:.6;font-size:13px">還沒有${SLOTS[eqTab]}。</div>`}</div>
+    <div class="row" style="margin-top:10px"><span style="font-size:13px">🎒 背包 ${bag}/40</span>
+      <span style="display:flex;gap:6px"><button onclick="bulkSalvage(0)">🧹 分解普通</button><button onclick="bulkSalvage(1)">🧹 分解優良以下</button></span></div>
     <button style="margin-top:10px" onclick="closeModal()">關閉</button>`);
 }
+
 function openCodex() {
   const next = n => [10,30,60,100].find(m => m > n);
   const rows = AREAS.map((a,ai) => a.e.map(e => ({ ...e, ai }))).flat().concat([{ n:"黃金史萊姆", i:"🟡", ai:-1 }]).map(e => {
